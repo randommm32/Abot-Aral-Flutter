@@ -6,6 +6,8 @@ import '../../core/student_widgets/custom_text_field.dart';
 import '../../core/student_widgets/custom_button.dart';
 import 'forgot_password_page.dart';
 import '../instructor_shell.dart';
+import '../../student/student_shell.dart';
+import '../../core/services/user_service.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -66,10 +68,20 @@ class _SignInPageState extends State<SignInPage> {
         password: password,
       );
 
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final role = await UserService.getUserRole(userId);
+
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const InstructorShell()),
-        );
+        if (role == 'facilitator') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const InstructorShell()),
+          );
+        } else {
+          // Default to Student Shell
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const StudentShell()),
+          );
+        }
       }
     } on AuthException catch (error) {
       if (mounted) {

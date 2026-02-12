@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
-<<<<<<< HEAD
 // import 'student/auth/sign_in_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'Instructor/instructor_shell.dart';
 import 'Instructor/auth/sign_in_page.dart';
-=======
-import 'student/auth/sign_in_page.dart';
-// import 'Instructor/auth/sign_in_page.dart';
->>>>>>> 024509e95f917caf7cb37d85169e3f3a7eff21dd
+import 'student/student_shell.dart';
+import 'core/services/user_service.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -35,9 +32,20 @@ class LandingPageState extends State<LandingPage> {
     if (!mounted) return;
 
     if (session != null) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const InstructorShell()),
-      );
+      final role = await UserService.getUserRole(session.user.id);
+      
+      if (!mounted) return;
+
+      if (role == 'facilitator') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const InstructorShell()),
+        );
+      } else {
+        // Default to Student Shell for 'student' or null
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const StudentShell()),
+        );
+      }
     } else {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const SignInPage()),

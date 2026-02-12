@@ -198,6 +198,7 @@ class _CourseTabState extends State<CourseTab> {
                               subtitle: course['category'] ?? 'No category',
                               learners: course['max_learners'] ?? 0,
                               modules: 0, // TODO: Fetch module count
+                              imageUrl: course['cover_image_url'],
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -378,6 +379,7 @@ class _LearningStrandCard extends StatelessWidget {
   final String subtitle;
   final int learners;
   final int modules;
+  final String? imageUrl;
   final VoidCallback onTap;
 
   const _LearningStrandCard({
@@ -385,6 +387,7 @@ class _LearningStrandCard extends StatelessWidget {
     required this.subtitle,
     required this.learners,
     required this.modules,
+    this.imageUrl,
     required this.onTap,
   });
 
@@ -401,25 +404,33 @@ class _LearningStrandCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Book icon container
+            // Image or Book icon container
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
                 color: AppColors.accent1,
                 borderRadius: BorderRadius.circular(10),
+                image: imageUrl != null && imageUrl!.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(imageUrl!),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              child: Center(
-                child: SvgPicture.asset(
-                  'assets/icons/book-open.svg',
-                  width: 24,
-                  height: 24,
-                  colorFilter: const ColorFilter.mode(
-                    AppColors.primary,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
+              child: imageUrl != null && imageUrl!.isNotEmpty
+                  ? null
+                  : Center(
+                      child: SvgPicture.asset(
+                        'assets/icons/book-open.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: const ColorFilter.mode(
+                          AppColors.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(width: 12),
             // Content

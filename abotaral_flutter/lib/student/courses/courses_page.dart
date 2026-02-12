@@ -4,8 +4,21 @@ import '../../core/constants/app_colors.dart';
 import 'course_lessons_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class CoursesPage extends StatelessWidget {
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/course_model.dart';
+
+class CoursesPage extends StatefulWidget {
   const CoursesPage({super.key});
+
+  @override
+  State<CoursesPage> createState() => _CoursesPageState();
+}
+
+class _CoursesPageState extends State<CoursesPage> {
+  final _coursesStream = Supabase.instance.client
+      .from('courses')
+      .stream(primaryKey: ['id'])
+      .order('created_at', ascending: false);
 
   @override
   Widget build(BuildContext context) {
@@ -46,39 +59,46 @@ class CoursesPage extends StatelessWidget {
             ),
             // Course List
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.54,
-                    lessonCount: 14,
-                    isCompleted: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
-                  ),
-                  const SizedBox(height: 12),
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.89,
-                    lessonCount: 67,
-                    showDownload: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
-                  ),
-                  const SizedBox(height: 12),
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.89,
-                    lessonCount: 67,
-                    isCompleted: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
-                  ),
-                ],
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _coursesStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final courses =
+                      snapshot.data!.map((e) => Course.fromJson(e)).toList();
+
+                  if (courses.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No courses available.',
+                        style: GoogleFonts.inter(color: AppColors.textSecondary),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: courses.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final course = courses[index];
+                      // TODO: Fetch progress for this student
+                      return _CourseItem(
+                        title: course.title,
+                        subtitle: course.category,
+                        progress: 0.0, // Default to 0 for now
+                        lessonCount: 0, // TODO: Fetch lesson count
+                        isCompleted: false,
+                        onContinue: () => _navigateToCourse(context, course),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -87,11 +107,11 @@ class CoursesPage extends StatelessWidget {
     );
   }
 
-  void _navigateToCourse(BuildContext context, String title) {
+  void _navigateToCourse(BuildContext context, Course course) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CourseLessonsPage(courseTitle: title),
+        builder: (context) => CourseLessonsPage(course: course),
       ),
     );
   }

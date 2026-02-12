@@ -5,6 +5,7 @@ import '../../core/student_widgets/progress_bar.dart';
 import '../student_shell.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../courses/course_lessons_page.dart';
+import '../../core/models/course_model.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -151,8 +152,18 @@ class HomePage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const CourseLessonsPage(
-                                  courseTitle: 'Learning Material 1',
+                                builder: (context) => CourseLessonsPage(
+                                  course: Course(
+                                    id: 'temp-id', // Placeholder ID
+                                    title: 'Learning Material 1',
+                                    description: 'Placeholder description',
+                                    category: 'English and Filipino',
+                                    difficulty: 'Beginner',
+                                    duration: 0,
+                                    maxLearners: 0,
+                                    objectives: [],
+                                    facilitatorId: 'temp-facilitator',
+                                  ),
                                 ),
                               ),
                             );

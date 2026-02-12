@@ -27,11 +27,12 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
 
 
   final List<String> _categories = [
-    'Academic',
-    'Technical-Vocational',
-    'Arts & Design',
-    'Sports',
-    'Languages',
+    'English & Filipino',
+    'Scientific and Critical Thinking Skills',
+    'Mathematics and Problem Solving Skills',
+    'Life and Career Skills',
+    'Understanding Self and Society',
+    'Digital Citizenship',
     'Others',
   ];
 

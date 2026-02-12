@@ -3,13 +3,15 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'assessment_questions_page.dart';
 
+import '../../core/models/course_model.dart';
+
 class QuizAssessmentPage extends StatelessWidget {
-  final String courseTitle;
+  final Course course;
   final String quizTitle;
 
   const QuizAssessmentPage({
     super.key,
-    required this.courseTitle,
+    required this.course,
     required this.quizTitle,
   });
 
@@ -53,7 +55,7 @@ class QuizAssessmentPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  courseTitle,
+                  course.title,
                   style: GoogleFonts.inter(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -226,10 +228,10 @@ class QuizAssessmentPage extends StatelessWidget {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => AssessmentQuestionsPage(
-                                    courseTitle: courseTitle,
-                                    quizTitle: quizTitle,
-                                  ),
+                                    builder: (context) => AssessmentQuestionsPage(
+                                      course: course,
+                                      quizTitle: quizTitle,
+                                    ),
                                 ),
                               );
                             },

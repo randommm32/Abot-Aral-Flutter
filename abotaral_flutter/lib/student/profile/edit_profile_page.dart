@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -11,15 +16,173 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final _usernameController = TextEditingController(text: 'Juan Dela Cruz');
-  final _emailController = TextEditingController(text: 'student@als.edu.ph');
+  final _firstNameController = TextEditingController();
+  final _middleNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _suffixController = TextEditingController();
+  final _emailController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _isLoading = true;
+  String? _avatarUrl;
+  File? _imageFile;
+  Uint8List? _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _getProfile();
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final email = Supabase.instance.client.auth.currentUser!.email ?? '';
+      
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .single();
+
+      if (mounted) {
+        setState(() {
+          _firstNameController.text = data['first_name'] ?? '';
+          _middleNameController.text = data['middle_name'] ?? '';
+          _lastNameController.text = data['last_name'] ?? '';
+          _suffixController.text = data['suffix'] ?? '';
+          _avatarUrl = data['avatar_url'];
+          _emailController.text = email;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      
+      String? newAvatarUrl;
+      final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.png';
+
+      if (kIsWeb && _imageBytes != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .uploadBinary(fileName, _imageBytes!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      } else if (!kIsWeb && _imageFile != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .upload(fileName, _imageFile!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      }
+
+      final updates = <String, dynamic>{
+        'first_name': _firstNameController.text.trim(),
+        'middle_name': _middleNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'suffix': _suffixController.text.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (newAvatarUrl != null) {
+        updates['avatar_url'] = newAvatarUrl;
+      }
+
+      // 1. Update Profile Data
+      await Supabase.instance.client
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId);
+
+      // 2. Update Auth Data (Email/Password)
+      final UserAttributes attributes = UserAttributes(
+        email: _emailController.text.trim() !=
+                Supabase.instance.client.auth.currentUser?.email
+            ? _emailController.text.trim()
+            : null,
+        password: _newPasswordController.text.isNotEmpty
+            ? _newPasswordController.text
+            : null,
+      );
+
+      // Only call updateUser if there are attribute changes
+      if (attributes.email != null || attributes.password != null) {
+        if (_newPasswordController.text.isNotEmpty &&
+            _newPasswordController.text != _confirmPasswordController.text) {
+          throw 'Passwords do not match';
+        }
+        await Supabase.instance.client.auth.updateUser(attributes);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
+        );
+        Navigator.pop(context, true); // Go back and signal update
+      }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+
+    if (result != null) {
+      if (kIsWeb) {
+         if (result.files.single.bytes != null) {
+            setState(() {
+              _imageBytes = result.files.single.bytes;
+              _imageFile = null; // Clear file if switching
+            });
+         }
+      } else {
+         if (result.files.single.path != null) {
+            setState(() {
+              _imageFile = File(result.files.single.path!);
+              _imageBytes = null;
+            });
+         }
+      }
+    }
+  }
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _firstNameController.dispose();
+    _middleNameController.dispose();
+    _lastNameController.dispose();
+    _suffixController.dispose();
     _emailController.dispose();
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
@@ -63,53 +226,102 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Profile Picture Section
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
+                    Center(
+                      child: Stack(
                         children: [
                           Container(
-                            width: 80,
-                            height: 80,
+                            width: 100,
+                            height: 100,
                             decoration: BoxDecoration(
                               color: AppColors.accent1,
                               shape: BoxShape.circle,
+                              image: (kIsWeb && _imageBytes != null)
+                                  ? DecorationImage(
+                                      image: MemoryImage(_imageBytes!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : (_imageFile != null
+                                      ? DecorationImage(
+                                          image: FileImage(_imageFile!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : (_avatarUrl != null
+                                          ? DecorationImage(
+                                              image: NetworkImage(_avatarUrl!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null)),
                             ),
-                            child: Center(
-                              child: Text(
-                                'J',
-                                style: GoogleFonts.inter(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
+                            child: (_imageFile == null && _imageBytes == null && _avatarUrl == null)
+                                ? Center(
+                                    child: Text(
+                                      (_firstNameController.text.isNotEmpty
+                                              ? _firstNameController.text[0]
+                                              : 'S')
+                                          .toUpperCase(),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickImage,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
                                   color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 16,
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Edit Profile Picture',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Username Field
-                    _buildLabel('Username'),
+                    // Name Fields
+                    _buildLabel('First Name'),
                     const SizedBox(height: 8),
                     _buildTextField(
-                      controller: _usernameController,
-                      hintText: 'Enter username',
+                      controller: _firstNameController,
+                      hintText: 'First Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Middle Name'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _middleNameController,
+                      hintText: 'Middle Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Last Name'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _lastNameController,
+                      hintText: 'Last Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Suffix'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _suffixController,
+                      hintText: 'Suffix (Optional)',
                     ),
                     const SizedBox(height: 20),
                     // Email Field
@@ -232,12 +444,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String hintText,
     bool obscureText = false,
     TextInputType? keyboardType,
+    bool readOnly = false,
   }) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
-      style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
+      readOnly: readOnly,
+      enabled: !readOnly, // Visual indication
+      style: GoogleFonts.inter(
+        fontSize: 14, 
+        color: readOnly ? AppColors.textSecondary : AppColors.textPrimary
+      ),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: GoogleFonts.inter(fontSize: 14, color: AppColors.textHint),
@@ -351,8 +569,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.pop(context); // Close dialog
-                        Navigator.pop(context); // Go back to profile
+                        // Close dialog and start save
+                        Navigator.pop(context);
+                        _saveChanges();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,

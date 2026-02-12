@@ -1,3 +1,4 @@
+import '../../core/models/course_model.dart';
 import 'assessment_questions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,9 +9,9 @@ import '../chat/class_forum_page.dart';
 import 'courses_page.dart';
 
 class CourseLessonsPage extends StatefulWidget {
-  final String courseTitle;
+  final Course course;
 
-  const CourseLessonsPage({super.key, required this.courseTitle});
+  const CourseLessonsPage({super.key, required this.course});
 
   @override
   State<CourseLessonsPage> createState() => _CourseLessonsPageState();
@@ -89,7 +90,7 @@ class _CourseLessonsPageState extends State<CourseLessonsPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.courseTitle,
+                  widget.course.title,
                   style: GoogleFonts.inter(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -143,8 +144,8 @@ class _CourseLessonsPageState extends State<CourseLessonsPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _LessonsTab(),
-                _AssessmentsTab(courseTitle: widget.courseTitle),
+                _LessonsTab(course: widget.course),
+                _AssessmentsTab(course: widget.course),
               ],
             ),
           ),
@@ -204,6 +205,10 @@ class _TabButton extends StatelessWidget {
 }
 
 class _LessonsTab extends StatelessWidget {
+  final Course course;
+
+  const _LessonsTab({required this.course});
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -555,9 +560,9 @@ class _ContentSection extends StatelessWidget {
 }
 
 class _AssessmentsTab extends StatelessWidget {
-  final String courseTitle;
+  final Course course;
 
-  const _AssessmentsTab({required this.courseTitle});
+  const _AssessmentsTab({required this.course});
 
   @override
   Widget build(BuildContext context) {
@@ -573,8 +578,8 @@ class _AssessmentsTab extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => AssessmentQuestionsPage(
-                  courseTitle: courseTitle,
-                  quizTitle: 'Quiz 1',
+                  course: course,
+                  quizTitle: 'Quiz 1', // TODO: Dynamic quizzes
                 ),
               ),
             );
@@ -590,8 +595,8 @@ class _AssessmentsTab extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => AssessmentQuestionsPage(
-                  courseTitle: courseTitle,
-                  quizTitle: 'Seatwork 1',
+                  course: course,
+                  quizTitle: 'Seatwork 1', // TODO: Dynamic seatworks
                 ),
               ),
             );

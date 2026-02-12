@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 // import 'student/auth/sign_in_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'Instructor/instructor_shell.dart';
 import 'Instructor/auth/sign_in_page.dart';
 
 class LandingPage extends StatefulWidget {
@@ -21,12 +23,21 @@ class LandingPageState extends State<LandingPage> {
 
   Future<void> _loadData() async {
     // Perform your data fetching here (e.g., API calls, database loading)
-    await Future.delayed(Duration(seconds: 5)); // Simulate loading
+    await Future.delayed(const Duration(seconds: 2)); // Reduced delay for better UX
 
-    // Navigate to the sign in page, replacing the current route
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const SignInPage()),
-    );
+    final session = Supabase.instance.client.auth.currentSession;
+
+    if (!mounted) return;
+
+    if (session != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const InstructorShell()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const SignInPage()),
+      );
+    }
   }
 
   @override

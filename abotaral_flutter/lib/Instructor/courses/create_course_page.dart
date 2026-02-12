@@ -1,7 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'learning_material_details_page.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../core/models/course_model.dart';
 
 class CreateCoursePage extends StatefulWidget {
   const CreateCoursePage({super.key});
@@ -12,10 +17,24 @@ class CreateCoursePage extends StatefulWidget {
 
 class _CreateCoursePageState extends State<CreateCoursePage> {
   final _titleController = TextEditingController();
+  PlatformFile? _pickedFile;
   final _descriptionController = TextEditingController();
   final _durationController = TextEditingController();
   final _maxLearnersController = TextEditingController();
   String _selectedDifficulty = 'Beginner';
+  String? _selectedCategory;
+  bool _isLoading = false;
+
+
+  final List<String> _categories = [
+    'Academic',
+    'Technical-Vocational',
+    'Arts & Design',
+    'Sports',
+    'Languages',
+    'Others',
+  ];
+
   final List<TextEditingController> _objectiveControllers = [
     TextEditingController(),
   ];
@@ -36,6 +55,133 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
     setState(() {
       _objectiveControllers.add(TextEditingController());
     });
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+    );
+    if (result != null) {
+      setState(() {
+        _pickedFile = result.files.first;
+      });
+    }
+  }
+
+  Future<String?> _uploadCoverImage(String userId) async {
+    if (_pickedFile == null) return null;
+
+    try {
+      final fileExt = _pickedFile!.extension ?? 'jpg';
+      final fileName = '${DateTime.now().toIso8601String()}.$fileExt';
+      final filePath = '$userId/$fileName';
+
+      if (_pickedFile!.bytes != null) {
+        // Web upload (if supported)
+        await Supabase.instance.client.storage
+            .from('course_covers')
+            .uploadBinary(filePath, _pickedFile!.bytes!);
+      } else if (_pickedFile!.path != null) {
+        // IO upload
+        final file = File(_pickedFile!.path!);
+        await Supabase.instance.client.storage
+            .from('course_covers')
+            .upload(filePath, file);
+      }
+
+      final imageUrl = Supabase.instance.client.storage
+          .from('course_covers')
+          .getPublicUrl(filePath);
+      
+      return imageUrl;
+    } catch (e) {
+      debugPrint('Error uploading image: $e');
+      // Continue without image or rethrow? 
+      // Rethrow to alert user
+      throw Exception('Failed to upload image: $e');
+    }
+  }
+
+  Future<void> _createCourse() async {
+    if (_titleController.text.isEmpty ||
+        _descriptionController.text.isEmpty ||
+        _selectedCategory == null ||
+        _durationController.text.isEmpty ||
+        _maxLearnersController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        throw Exception('User not logged in');
+      }
+
+      String? coverUrl;
+      if (_pickedFile != null) {
+        coverUrl = await _uploadCoverImage(user.id);
+      }
+
+      final course = Course(
+        title: _titleController.text,
+        description: _descriptionController.text,
+        category: _selectedCategory!,
+        difficulty: _selectedDifficulty,
+        duration: int.parse(_durationController.text),
+        maxLearners: int.parse(_maxLearnersController.text),
+        objectives: _objectiveControllers
+            .map((c) => c.text)
+            .where((text) => text.isNotEmpty)
+            .toList(),
+        facilitatorId: user.id,
+        coverUrl: coverUrl,
+      );
+
+      final courseJson = course.toJson();
+      debugPrint('Creating course with payload: $courseJson');
+
+      await Supabase.instance.client
+          .from('courses')
+          .insert(courseJson);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Course created successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pop(context); // Return to course list
+    } catch (e) {
+      debugPrint('Error creating course: $e');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error creating course: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _showCreateStrandDialog() {
@@ -139,13 +285,8 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        Navigator.pop(context);
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Strand created successfully!'),
-                          ),
-                        );
+                        Navigator.pop(context); // Close confirmation dialog
+                        _createCourse(); // Start creation process
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -177,8 +318,10 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
         child: Column(
           children: [
@@ -242,7 +385,7 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Course Image
+                    // Course Image (Placeholder for now)
                     Text(
                       'Course Image',
                       style: GoogleFonts.inter(
@@ -254,48 +397,61 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
                     const SizedBox(height: 8),
                     Container(
                       width: double.infinity,
-                      height: 140,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.border, width: 1.5),
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: AppColors.accent1,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.image_outlined,
-                                color: AppColors.primary,
-                                size: 24,
-                              ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _pickFile,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent1,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.image_outlined,
+                                      color: AppColors.primary,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _pickedFile != null
+                                      ? 'Selected: ${_pickedFile!.name}'
+                                      : 'Upload Cover Image',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _pickedFile != null
+                                      ? '${(_pickedFile!.size / 1024).toStringAsFixed(2)} KB'
+                                      : 'Recommended: 1200×630px',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Upload Cover Image',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Recommended: 1200×630px',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -312,40 +468,58 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
                     const SizedBox(height: 8),
                     _buildTextField(
                       controller: _descriptionController,
-                      hint:
-                          'Describe what learners will gain from this course...',
+                      hint: 'Describe what learners will gain from this course...',
                       maxLines: 4,
                     ),
                     const SizedBox(height: 20),
                     // Category
                     _buildLabel('Category', isRequired: true),
                     const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
+                    DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      decoration: InputDecoration(
+                         filled: true,
+                         fillColor: Colors.white,
+                         contentPadding: const EdgeInsets.symmetric(
+                           horizontal: 16,
+                           vertical: 14,
+                         ),
+                         border: OutlineInputBorder(
+                           borderRadius: BorderRadius.circular(8),
+                           borderSide: BorderSide(color: AppColors.border),
+                         ),
+                         enabledBorder: OutlineInputBorder(
+                           borderRadius: BorderRadius.circular(8),
+                           borderSide: BorderSide(color: AppColors.border),
+                         ),
+                         focusedBorder: OutlineInputBorder(
+                           borderRadius: BorderRadius.circular(8),
+                           borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+                         ),
+                         hintText: 'Select category',
+                         hintStyle: GoogleFonts.inter(
+                           fontSize: 14,
+                           color: AppColors.textSecondary,
+                         ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Select category',
+                      items: _categories.map((String category) {
+                        return DropdownMenuItem<String>(
+                          value: category,
+                          child: Text(
+                            category,
                             style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
+                               fontSize: 14, color: AppColors.textPrimary),
                           ),
-                          Icon(
-                            Icons.keyboard_arrow_down,
-                            color: AppColors.textSecondary,
-                          ),
-                        ],
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedCategory = newValue;
+                        });
+                      },
+                      icon: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -357,23 +531,19 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
                         _DifficultyChip(
                           label: 'Beginner',
                           isSelected: _selectedDifficulty == 'Beginner',
-                          onTap: () =>
-                              setState(() => _selectedDifficulty = 'Beginner'),
+                          onTap: () => setState(() => _selectedDifficulty = 'Beginner'),
                         ),
                         const SizedBox(width: 8),
                         _DifficultyChip(
                           label: 'Intermediate',
                           isSelected: _selectedDifficulty == 'Intermediate',
-                          onTap: () => setState(
-                            () => _selectedDifficulty = 'Intermediate',
-                          ),
+                          onTap: () => setState(() => _selectedDifficulty = 'Intermediate'),
                         ),
                         const SizedBox(width: 8),
                         _DifficultyChip(
                           label: 'Advanced',
                           isSelected: _selectedDifficulty == 'Advanced',
-                          onTap: () =>
-                              setState(() => _selectedDifficulty = 'Advanced'),
+                          onTap: () => setState(() => _selectedDifficulty = 'Advanced'),
                         ),
                       ],
                     ),
@@ -513,7 +683,16 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
             ),
           ],
         ),
-      ),
+        ), // SafeArea
+      ), // Scaffold
+      if (_isLoading)
+        Container(
+          color: Colors.black54,
+          child: const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+        ),
+    ],
     );
   }
 
@@ -580,6 +759,8 @@ class _CreateCoursePageState extends State<CreateCoursePage> {
     );
   }
 }
+
+
 
 class _DifficultyChip extends StatelessWidget {
   final String label;

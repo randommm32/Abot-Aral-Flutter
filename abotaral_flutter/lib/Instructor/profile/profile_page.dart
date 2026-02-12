@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../auth/sign_in_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -9,7 +11,7 @@ class ProfilePage extends StatelessWidget {
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -29,7 +31,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => Navigator.pop(dialogContext),
                     child: const Icon(
                       Icons.close,
                       color: AppColors.textSecondary,
@@ -51,7 +53,7 @@ class ProfilePage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () => Navigator.pop(dialogContext),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
@@ -75,12 +77,24 @@ class ProfilePage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(
-                          context,
-                          rootNavigator: true,
-                        ).pushNamedAndRemoveUntil('/signin', (route) => false);
+                      onTap: () async {
+                        try {
+                          Navigator.pop(dialogContext);
+                          await Supabase.instance.client.auth.signOut();
+                          if (context.mounted) {
+                            Navigator.of(
+                              context,
+                              rootNavigator: true,
+                            ).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const SignInPage(),
+                              ),
+                              (route) => false,
+                            );
+                          }
+                        } catch (e) {
+                          debugPrint('Error signing out: $e');
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),

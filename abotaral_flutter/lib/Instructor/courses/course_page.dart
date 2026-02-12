@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'create_course_page.dart';
@@ -7,11 +8,27 @@ import 'learning_material_details_page.dart';
 import 'manage_materials_page.dart';
 import '../students/course_reports_page.dart';
 
-class CourseTab extends StatelessWidget {
+class CourseTab extends StatefulWidget {
   const CourseTab({super.key});
 
   @override
+  State<CourseTab> createState() => _CourseTabState();
+}
+
+class _CourseTabState extends State<CourseTab> {
+  final _userId = Supabase.instance.client.auth.currentUser?.id;
+  final _coursesStream = Supabase.instance.client
+      .from('courses')
+      .stream(primaryKey: ['id'])
+      .eq('facilitator_id', Supabase.instance.client.auth.currentUser!.id)
+      .order('created_at', ascending: false);
+
+  @override
   Widget build(BuildContext context) {
+    if (_userId == null) {
+      return const Center(child: Text('Please log in'));
+    }
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
@@ -57,23 +74,33 @@ class CourseTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     // Stats Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _HeaderStatCard(value: '4', label: 'Active'),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _HeaderStatCard(
-                            value: '55',
-                            label: 'Learners',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _HeaderStatCard(value: '23', label: 'Modules'),
-                        ),
-                      ],
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _coursesStream,
+                      builder: (context, snapshot) {
+                        final count = snapshot.data?.length ?? 0;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: _HeaderStatCard(
+                                  value: count.toString(), label: 'Active'),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _HeaderStatCard(
+                                value: '55', // Placeholder for total learners
+                                label: 'Learners',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _HeaderStatCard(
+                                value: '23', // Placeholder for total modules
+                                label: 'Modules',
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -139,100 +166,53 @@ class CourseTab extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 1',
-                      subtitle: 'English and Filipino',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 1',
-                                  courseSubtitle: 'English and Filipino',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 2',
-                      subtitle: 'Scientific and Critical Thinking Skills',
-                      learners: 10,
-                      modules: 4,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 2',
-                                  courseSubtitle:
-                                      'Scientific and Critical Thinking Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 3',
-                      subtitle: 'Mathematical and Problem-Solving Skills',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 3',
-                                  courseSubtitle:
-                                      'Mathematical and Problem-Solving Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 4',
-                      subtitle: 'Life and Career Skills',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 4',
-                                  courseSubtitle: 'Life and Career Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 5',
-                      subtitle: 'Understanding the Self and Society',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 5',
-                                  courseSubtitle:
-                                      'Understanding the Self and Society',
-                                ),
-                          ),
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _coursesStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(child: Text('Error: ${snapshot.error}'));
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final courses = snapshot.data!;
+                        if (courses.isEmpty) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Text('No courses yet. Create one!'),
+                            ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: courses.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final course = courses[index];
+                            return _LearningStrandCard(
+                              title: course['title'] ?? 'Untitled',
+                              subtitle: course['category'] ?? 'No category',
+                              learners: course['max_learners'] ?? 0,
+                              modules: 0, // TODO: Fetch module count
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        LearningMaterialDetailsPage(
+                                      courseTitle: course['title'],
+                                      courseSubtitle: course['category'],
+                                      // Pass course ID or object if page supports it
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
                       },
                     ),
@@ -260,7 +240,7 @@ class CourseTab extends StatelessWidget {
                                   builder: (context) =>
                                       const ManageMaterialsPage(
                                         learningMaterialTitle:
-                                            'Learning Material 1',
+                                            'Learning Material 1', // Placeholder
                                       ),
                                 ),
                               );
@@ -277,7 +257,7 @@ class CourseTab extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const CourseReportsPage(
-                                    courseTitle: 'Learning Material 1',
+                                    courseTitle: 'Learning Material 1', // Placeholder
                                     courseSubtitle: 'English and Filipino',
                                   ),
                                 ),
@@ -299,7 +279,8 @@ class CourseTab extends StatelessWidget {
   }
 
   void _showNotificationsDialog(BuildContext context) {
-    showDialog(
+    // ... existing implementation ...
+     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.white,

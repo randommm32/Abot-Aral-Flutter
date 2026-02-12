@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../auth/sign_in_page.dart';
+import 'edit_profile_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -68,10 +69,6 @@ class ProfilePage extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: AppColors.accent1,
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppColors.primary,
-                                width: 3,
-                              ),
                             ),
                             child: Center(
                               child: Text(
@@ -196,7 +193,15 @@ class ProfilePage extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _IconStatCard(
-                            icon: Icons.download_outlined,
+                            icon: SvgPicture.asset(
+                              'assets/icons/download2.svg',
+                              width: 24,
+                              height: 24,
+                              colorFilter: ColorFilter.mode(
+                              AppColors.primary,
+                              BlendMode.srcIn,
+                              ),
+                            ),
                             value: '3',
                             label: 'Offline Modules',
                           ),
@@ -204,7 +209,15 @@ class ProfilePage extends StatelessWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _IconStatCard(
-                            icon: Icons.grid_view_outlined,
+                            icon: SvgPicture.asset(
+                              'assets/icons/book-open.svg',
+                              width: 24,
+                              height: 24,
+                              colorFilter: ColorFilter.mode(
+                                AppColors.primary,
+                                BlendMode.srcIn,
+                              ),
+                            ),
                             value: '5',
                             label: 'Total Modules',
                           ),
@@ -213,7 +226,15 @@ class ProfilePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _IconStatCard(
-                      icon: Icons.access_time_outlined,
+                      icon: SvgPicture.asset(
+                        'assets/icons/clock.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: ColorFilter.mode(
+                          AppColors.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
                       value: '37',
                       label: 'Total Lessons',
                     ),
@@ -266,6 +287,71 @@ class ProfilePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    // Account Settings Button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const EditProfilePage(),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent1,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: SvgPicture.asset(
+                                'assets/icons/settings.svg',
+                                width: 24,
+                                height: 24,
+                                colorFilter: ColorFilter.mode(
+                                  AppColors.primary,
+                                  BlendMode.srcIn,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Account Settings',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            SvgPicture.asset(
+                              'assets/instructor_icons/arrow-left.svg',
+                              width: 24,
+                              height: 24,
+                              colorFilter: ColorFilter.mode(
+                                AppColors.textSecondary,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     // Logout Button
                     OutlinedButton(
                       onPressed: () => _showLogoutDialog(context),
@@ -276,7 +362,7 @@ class ProfilePage extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        minimumSize: const Size(double.infinity, 48),
+                        minimumSize: const Size(double.infinity, 60),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -462,7 +548,7 @@ class _StatItem extends StatelessWidget {
 }
 
 class _IconStatCard extends StatelessWidget {
-  final IconData icon;
+  final SvgPicture icon;
   final String value;
   final String label;
 
@@ -486,11 +572,12 @@ class _IconStatCard extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.accent1,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: AppColors.primary, size: 22),
+            child: icon,
           ),
           const SizedBox(height: 8),
           Text(
@@ -529,15 +616,6 @@ class _ModuleProgressItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 4,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

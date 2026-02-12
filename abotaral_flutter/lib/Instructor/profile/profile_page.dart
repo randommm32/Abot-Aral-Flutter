@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'edit_profile_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -412,7 +413,15 @@ class ProfilePage extends StatelessWidget {
                     _SettingsItem(
                       icon: 'assets/instructor_icons/settings.svg',
                       label: 'Account Settings',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const InstructorEditProfilePage(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 8),
                     _SettingsItem(
@@ -448,7 +457,7 @@ class ProfilePage extends StatelessWidget {
                           ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),

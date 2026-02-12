@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import 'student/auth/sign_in_page.dart';
-import 'Instructor/auth/sign_in_page.dart';
+import 'student/auth/sign_in_page.dart';
+// import 'Instructor/auth/sign_in_page.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});

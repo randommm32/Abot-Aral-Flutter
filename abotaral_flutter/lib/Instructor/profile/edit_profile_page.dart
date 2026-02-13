@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 class InstructorEditProfilePage extends StatefulWidget {
   const InstructorEditProfilePage({super.key});
@@ -12,21 +17,218 @@ class InstructorEditProfilePage extends StatefulWidget {
 }
 
 class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
-  final _fullNameController = TextEditingController(text: 'Teacher Maria');
-  final _emailController = TextEditingController(
-    text: 'teacher.maria@als.gov.ph',
-  );
-  final _phoneController = TextEditingController(text: '+63 912 345 6789');
-  final _workLocationController = TextEditingController(
-    text: 'Barangay Hall, Quezon City',
-  );
+  final _firstNameController = TextEditingController();
+  final _middleNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _suffixController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _workLocationController = TextEditingController();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  
+  bool _isLoading = true;
+  String? _avatarUrl;
+  File? _imageFile;
+  Uint8List? _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _getProfile();
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final email = Supabase.instance.client.auth.currentUser!.email ?? '';
+      
+      // Try fetching with joined facilitator profile
+      try {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('*, facilitator_profiles(*)')
+            .eq('id', userId)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _firstNameController.text = data['first_name'] ?? '';
+            _middleNameController.text = data['middle_name'] ?? '';
+            _lastNameController.text = data['last_name'] ?? '';
+            _suffixController.text = data['suffix'] ?? '';
+            _avatarUrl = data['avatar_url'];
+            _emailController.text = email;
+            // Phone is still placeholder
+            _phoneController.text = '+63 912 345 6789'; 
+            
+            // Fetch workplace from facilitator_profiles if available
+            if (data['facilitator_profiles'] != null) {
+              _workLocationController.text = data['facilitator_profiles']['workplace_assignment'] ?? '';
+            } else {
+              _workLocationController.text = '';
+            }
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        // Fallback
+        debugPrint('Error fetching joined profile: $e');
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('id', userId)
+            .single();
+
+        if (mounted) {
+            setState(() {
+            _firstNameController.text = data['first_name'] ?? '';
+            _middleNameController.text = data['middle_name'] ?? '';
+            _lastNameController.text = data['last_name'] ?? '';
+            _suffixController.text = data['suffix'] ?? '';
+            _avatarUrl = data['avatar_url'];
+            _emailController.text = email;
+            _phoneController.text = '+63 912 345 6789'; 
+            _workLocationController.text = '';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+
+    if (result != null) {
+      if (kIsWeb) {
+         if (result.files.single.bytes != null) {
+            setState(() {
+              _imageBytes = result.files.single.bytes;
+              _imageFile = null; 
+            });
+         }
+      } else {
+         if (result.files.single.path != null) {
+            setState(() {
+              _imageFile = File(result.files.single.path!);
+              _imageBytes = null;
+            });
+         }
+      }
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      
+      String? newAvatarUrl;
+      final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.png';
+
+      if (kIsWeb && _imageBytes != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .uploadBinary(fileName, _imageBytes!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      } else if (!kIsWeb && _imageFile != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .upload(fileName, _imageFile!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      }
+
+      final updates = <String, dynamic>{
+        'first_name': _firstNameController.text.trim(),
+        'middle_name': _middleNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'suffix': _suffixController.text.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (newAvatarUrl != null) {
+        updates['avatar_url'] = newAvatarUrl;
+      }
+
+      // Update Profile Data
+      await Supabase.instance.client
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId);
+
+      // Update Facilitator Profile (Workplace)
+      if (_workLocationController.text.isNotEmpty) {
+        await Supabase.instance.client.from('facilitator_profiles').upsert({
+          'id': userId,
+          'workplace_assignment': _workLocationController.text.trim(),
+        });
+      }
+
+      // Update Auth Data (Email/Password)
+      final UserAttributes attributes = UserAttributes(
+        email: _emailController.text.trim() !=
+                Supabase.instance.client.auth.currentUser?.email
+            ? _emailController.text.trim()
+            : null,
+        password: _newPasswordController.text.isNotEmpty
+            ? _newPasswordController.text
+            : null,
+      );
+
+      // Only call updateUser if there are attribute changes
+      if (attributes.email != null || attributes.password != null) {
+        if (_newPasswordController.text.isNotEmpty &&
+            _newPasswordController.text != _confirmPasswordController.text) {
+          throw 'Passwords do not match';
+        }
+        await Supabase.instance.client.auth.updateUser(attributes);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
+        );
+        Navigator.pop(context, true); // Go back and signal update
+      }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
-    _fullNameController.dispose();
+    _firstNameController.dispose();
+    _middleNameController.dispose();
+    _lastNameController.dispose();
+    _suffixController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _workLocationController.dispose();
@@ -66,47 +268,74 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
             ),
             // Content
             Expanded(
-              child: SingleChildScrollView(
+              child: _isLoading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Profile Picture Section
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
+                    Center(
+                      child: Stack(
                         children: [
                           Container(
-                            width: 80,
-                            height: 80,
+                            width: 100,
+                            height: 100,
                             decoration: BoxDecoration(
                               color: AppColors.accent3,
                               shape: BoxShape.circle,
+                              image: (kIsWeb && _imageBytes != null)
+                                  ? DecorationImage(
+                                      image: MemoryImage(_imageBytes!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : (_imageFile != null
+                                      ? DecorationImage(
+                                          image: FileImage(_imageFile!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : (_avatarUrl != null
+                                          ? DecorationImage(
+                                              image: NetworkImage(_avatarUrl!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null)),
                             ),
-                            child: Center(
-                              child: Text(
-                                'TM',
-                                style: GoogleFonts.inter(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.background,
+                            child: (_imageFile == null && _imageBytes == null && _avatarUrl == null)
+                                ? Center(
+                                    child: Text(
+                                      (_firstNameController.text.isNotEmpty
+                                              ? _firstNameController.text[0]
+                                              : 'I')
+                                          .toUpperCase(),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.background,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickImage,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 16,
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Edit Profile Picture',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -114,12 +343,36 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Full Name Field
-                    _buildLabel('Full Name'),
+                    // Name Fields
+                    _buildLabel('First Name'),
                     const SizedBox(height: 8),
                     _buildTextField(
-                      controller: _fullNameController,
-                      hintText: 'Enter full name',
+                      controller: _firstNameController,
+                      hintText: 'First Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Middle Name'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _middleNameController,
+                      hintText: 'Middle Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Last Name'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _lastNameController,
+                      hintText: 'Last Name',
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildLabel('Suffix'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _suffixController,
+                      hintText: 'Suffix (Optional)',
                     ),
                     const SizedBox(height: 20),
 
@@ -140,6 +393,7 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
                       controller: _phoneController,
                       hintText: 'Enter phone number',
                       keyboardType: TextInputType.phone,
+                      readOnly: true, // Until added to DB
                     ),
                     const SizedBox(height: 20),
 
@@ -267,17 +521,19 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
     required String hintText,
     bool obscureText = false,
     TextInputType? keyboardType,
+    bool readOnly = false,
   }) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
+      readOnly: readOnly,
       keyboardType: keyboardType,
       style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: GoogleFonts.inter(fontSize: 14, color: AppColors.textHint),
         filled: true,
-        fillColor: AppColors.inputFill,
+        fillColor: readOnly ? AppColors.inputFill.withValues(alpha: 0.5) : AppColors.inputFill,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
@@ -387,7 +643,7 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context); // Close dialog
-                        Navigator.pop(context); // Go back to profile
+                        _saveChanges(); // Start save
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
@@ -416,3 +672,4 @@ class _InstructorEditProfilePageState extends State<InstructorEditProfilePage> {
     );
   }
 }
+

@@ -17,11 +17,31 @@ class CourseTab extends StatefulWidget {
 
 class _CourseTabState extends State<CourseTab> {
   final _userId = Supabase.instance.client.auth.currentUser?.id;
-  final _coursesStream = Supabase.instance.client
-      .from('courses')
-      .stream(primaryKey: ['id'])
-      .eq('facilitator_id', Supabase.instance.client.auth.currentUser!.id)
-      .order('created_at', ascending: false);
+  late Stream<List<Map<String, dynamic>>> _coursesStream;
+  String _selectedSort = 'Date (Newest)';
+
+  @override
+  void initState() {
+    super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
+    var query = Supabase.instance.client
+        .from('courses')
+        .stream(primaryKey: ['id'])
+        .eq('facilitator_id', _userId!);
+
+    if (_selectedSort == 'Date (Newest)') {
+      _coursesStream = query.order('created_at', ascending: false);
+    } else if (_selectedSort == 'Date (Oldest)') {
+      _coursesStream = query.order('created_at', ascending: true);
+    } else if (_selectedSort == 'Name (A-Z)') {
+      _coursesStream = query.order('title', ascending: true);
+    } else if (_selectedSort == 'Name (Z-A)') {
+      _coursesStream = query.order('title', ascending: false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,19 +76,17 @@ class _CourseTabState extends State<CourseTab> {
                             color: Colors.white,
                           ),
                         ),
-                        Container(
-                          child: IconButton(
-                            icon: SvgPicture.asset(
-                              'assets/icons/bell.svg',
-                              width: 25,
-                              height: 25,
-                              colorFilter: const ColorFilter.mode(
-                                Colors.white,
-                                BlendMode.srcIn,
-                              ),
+                        IconButton(
+                          icon: SvgPicture.asset(
+                            'assets/icons/bell.svg',
+                            width: 25,
+                            height: 25,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
                             ),
-                            onPressed: () => _showNotificationsDialog(context),
                           ),
+                          onPressed: () => _showNotificationsDialog(context),
                         ),
                       ],
                     ),
@@ -157,13 +175,56 @@ class _CourseTabState extends State<CourseTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Active Courses',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Active Courses',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            setState(() {
+                              _selectedSort = value;
+                              _initStream();
+                            });
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'Date (Newest)',
+                              child: Text('Date (Newest)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Date (Oldest)',
+                              child: Text('Date (Oldest)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Name (A-Z)',
+                              child: Text('Name (A-Z)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Name (Z-A)',
+                              child: Text('Name (Z-A)'),
+                            ),
+                          ],
+                          child: Row(
+                            children: [
+                              Text(
+                                _selectedSort,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     StreamBuilder<List<Map<String, dynamic>>>(
@@ -205,9 +266,9 @@ class _CourseTabState extends State<CourseTab> {
                                   MaterialPageRoute(
                                     builder: (context) =>
                                         LearningMaterialDetailsPage(
+                                      courseId: course['id'],
                                       courseTitle: course['title'],
                                       courseSubtitle: course['category'],
-                                      // Pass course ID or object if page supports it
                                     ),
                                   ),
                                 );
@@ -346,7 +407,7 @@ class _HeaderStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -365,7 +426,7 @@ class _HeaderStatCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
         ],

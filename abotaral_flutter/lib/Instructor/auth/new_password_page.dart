@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -46,13 +47,28 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
     return null;
   }
 
-  void _handleChangePassword() {
+  Future<void> _handleChangePassword() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const PasswordChangedPage()),
-        (route) => false,
-      );
+      try {
+        await Supabase.instance.client.auth.updateUser(
+          UserAttributes(password: _passwordController.text.trim()),
+        );
+
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const PasswordChangedPage()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${e.toString()}')),
+          );
+        }
+      }
     }
   }
 

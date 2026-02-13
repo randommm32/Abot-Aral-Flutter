@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
@@ -63,12 +64,28 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     return null;
   }
 
-  void _handleVerify() {
+  Future<void> _handleVerify() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const NewPasswordPage()),
-      );
+      try {
+        await Supabase.instance.client.auth.verifyOTP(
+          email: widget.email,
+          token: _codeController.text.trim(),
+          type: OtpType.recovery,
+        );
+
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NewPasswordPage()),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${e.toString()}')),
+          );
+        }
+      }
     }
   }
 

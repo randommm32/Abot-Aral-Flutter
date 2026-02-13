@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -34,15 +35,32 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return null;
   }
 
-  void _handleSend() {
+  Future<void> _handleSend() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              EmailVerificationPage(email: _emailController.text),
-        ),
-      );
+      try {
+        await Supabase.instance.client.auth.resetPasswordForEmail(
+          _emailController.text.trim(),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Verification code sent to email')),
+          );
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  EmailVerificationPage(email: _emailController.text.trim()),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${e.toString()}')),
+          );
+        }
+      }
     }
   }
 

@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/constants/app_colors.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/lesson_model.dart';
+import '../../core/models/learning_material_model.dart';
 import 'upload_materials_page.dart';
+import 'widgets/learning_material_item.dart';
 
 class ModuleDetailsPage extends StatelessWidget {
+  final String? courseId;
+  final String? moduleId;
   final String moduleTitle;
   final String learningMaterialTitle;
   final int lessonCount;
@@ -13,6 +19,8 @@ class ModuleDetailsPage extends StatelessWidget {
 
   const ModuleDetailsPage({
     super.key,
+    this.courseId,
+    this.moduleId,
     required this.moduleTitle,
     required this.learningMaterialTitle,
     required this.lessonCount,
@@ -71,7 +79,7 @@ class ModuleDetailsPage extends StatelessWidget {
                       'Learning Material 1',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: Colors.white.withAlpha(200),
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -87,35 +95,34 @@ class ModuleDetailsPage extends StatelessWidget {
                 ),
               ),
 
-            Container(
-              padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
-              child: // Stats Row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _HeaderStatCard(
-                          value: '$lessonCount',
-                          label: 'Lessons',
-                        ),
+              Container(
+                padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
+                child: // Stats Row
+                    Row(
+                  children: [
+                    Expanded(
+                      child: _HeaderStatCard(
+                        value: '$lessonCount',
+                        label: 'Lessons',
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _HeaderStatCard(
-                          value: '$completedCount',
-                          label: 'Completed',
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _HeaderStatCard(
+                        value: '$completedCount',
+                        label: 'Completed',
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _HeaderStatCard(
-                          value: duration,
-                          label: 'Duration',
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _HeaderStatCard(
+                        value: duration,
+                        label: 'Duration',
                       ),
-                    ],
-                  ),
-            ),
-
+                    ),
+                  ],
+                ),
+              ),
 
               // Add Lesson Button
               Padding(
@@ -177,39 +184,82 @@ class ModuleDetailsPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _LessonItem(
-                      icon: 'assets/icons/check-circle.svg',
-                      title: 'Introduction to Parts of Speech',
-                      duration: '25 mins',
-                      isCompleted: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _LessonItem(
-                      icon: 'assets/icons/check-circle.svg',
-                      title: 'Nouns and Pronouns',
-                      duration: '30 mins',
-                      isCompleted: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _LessonItem(
-                      number: '3',
-                      title: 'Verbs and Tenses',
-                      duration: '35 mins',
-                      isCompleted: false,
-                    ),
-                    const SizedBox(height: 12),
-                    _LessonItem(
-                      number: '4',
-                      title: 'Adjectives and Adverbs',
-                      duration: '28 mins',
-                      isCompleted: false,
-                    ),
-                    const SizedBox(height: 12),
-                    _LessonItem(
-                      number: '5',
-                      title: 'Practice Exercises',
-                      duration: '40 mins',
-                      isCompleted: false,
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: (moduleId != null)
+                          ? Supabase.instance.client
+                              .from('lessons')
+                              .stream(primaryKey: ['id'])
+                              .eq('module_id', moduleId!)
+                              .order('order_index', ascending: true)
+                          : const Stream.empty(),
+                      builder: (context, snapshot) {
+                        if (moduleId == null) {
+                          return const Text('Module ID is missing.');
+                        }
+                        if (snapshot.hasError) {
+                          return Text('Error loading lessons: ${snapshot.error}');
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final lessons = snapshot.data!
+                            .map((e) => Lesson.fromJson(e))
+                            .toList();
+
+                        if (lessons.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                children: [
+                                  SvgPicture.asset(
+                                    'assets/instructor_icons/file-text.svg', // Reusing file-text or similar
+                                    width: 40,
+                                    height: 40,
+                                    colorFilter: const ColorFilter.mode(
+                                        AppColors.textSecondary,
+                                        BlendMode.srcIn),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No Lessons Yet',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Column(
+                          children: lessons.map((lesson) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _LessonItem(
+                                icon: 'assets/icons/check-circle.svg',
+                                number: '1',
+                                title: lesson.title,
+                                duration: '0 mins',
+                                isCompleted: false,
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
 
@@ -218,7 +268,7 @@ class ModuleDetailsPage extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Learning Materials (3)',
+                          'Learning Materials',
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -231,8 +281,11 @@ class ModuleDetailsPage extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => UploadMaterialsPage(
+                                  courseId: courseId,
+                                  moduleId: moduleId,
                                   courseTitle: moduleTitle,
-                                  learningMaterialTitle: learningMaterialTitle,
+                                  learningMaterialTitle:
+                                      learningMaterialTitle,
                                 ),
                               ),
                             );
@@ -274,19 +327,43 @@ class ModuleDetailsPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _MaterialItem(
-                      title: 'Module Overview Slides',
-                      subtitle: 'overview.pdf • Uploaded Jan 15, 2026',
-                    ),
-                    const SizedBox(height: 12),
-                    _MaterialItem(
-                      title: 'Lesson Handouts',
-                      subtitle: 'handouts.pdf • Uploaded Jan 15, 2026',
-                    ),
-                    const SizedBox(height: 12),
-                    _MaterialItem(
-                      title: 'Practice Worksheets',
-                      subtitle: 'worksheets.pdf • Uploaded Jan 18, 2026',
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: (moduleId != null)
+                          ? Supabase.instance.client
+                              .from('learning_materials')
+                              .stream(primaryKey: ['id'])
+                              .eq('module_id', moduleId!)
+                              .order('created_at', ascending: false)
+                          : const Stream.empty(),
+                      builder: (context, snapshot) {
+                        if (moduleId == null) {
+                          return const Text('Module ID missing.');
+                        }
+                        if (snapshot.hasError) {
+                          return Text('Error: ${snapshot.error}');
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final materials = snapshot.data!
+                            .map((e) => LearningMaterial.fromJson(e))
+                            .toList();
+
+                        if (materials.isEmpty) {
+                          return const Text('No materials.');
+                        }
+
+                        return Column(
+                          children: materials.map((material) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: LearningMaterialItem(material: material),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -330,7 +407,7 @@ class _HeaderStatCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w400,
-              color: AppColors.primary.withAlpha(200),
+              color: AppColors.primary.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -378,7 +455,7 @@ class _LessonItem extends StatelessWidget {
             child: Center(
               child: isCompleted
                   ? SvgPicture.asset(
-                      icon!,
+                      icon ?? 'assets/icons/check-circle.svg',
                       width: 20,
                       height: 20,
                       colorFilter: const ColorFilter.mode(
@@ -387,7 +464,7 @@ class _LessonItem extends StatelessWidget {
                       ),
                     )
                   : Text(
-                      number!,
+                      number ?? '#',
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -457,101 +534,6 @@ class _LessonItem extends StatelessWidget {
             ),
           ),
           // Action buttons
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () {},
-                child: SvgPicture.asset(
-                  'assets/instructor_icons/edit.svg',
-                  width: 18,
-                  height: 18,
-                  colorFilter: const ColorFilter.mode(
-                    AppColors.textSecondary,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              GestureDetector(
-                onTap: () {},
-                child: SvgPicture.asset(
-                  'assets/instructor_icons/delete.svg',
-                  width: 18,
-                  height: 18,
-                  colorFilter: const ColorFilter.mode(
-                    Color(0xFFEF4444),
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MaterialItem extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _MaterialItem({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.accent1,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: SvgPicture.asset(
-                'assets/icons/file-text.svg',
-                width: 20,
-                height: 20,
-                colorFilter: const ColorFilter.mode(
-                  AppColors.primary,
-                  BlendMode.srcIn,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
           Row(
             children: [
               GestureDetector(

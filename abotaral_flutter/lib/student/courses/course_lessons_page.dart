@@ -1,3 +1,8 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/learning_material_model.dart';
+import '../../core/models/module_model.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/models/course_model.dart';
 import 'assessment_questions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,9 +13,9 @@ import '../chat/class_forum_page.dart';
 import 'courses_page.dart';
 
 class CourseLessonsPage extends StatefulWidget {
-  final String courseTitle;
+  final Course course;
 
-  const CourseLessonsPage({super.key, required this.courseTitle});
+  const CourseLessonsPage({super.key, required this.course});
 
   @override
   State<CourseLessonsPage> createState() => _CourseLessonsPageState();
@@ -89,7 +94,7 @@ class _CourseLessonsPageState extends State<CourseLessonsPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.courseTitle,
+                  widget.course.title,
                   style: GoogleFonts.inter(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -143,8 +148,8 @@ class _CourseLessonsPageState extends State<CourseLessonsPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _LessonsTab(),
-                _AssessmentsTab(courseTitle: widget.courseTitle),
+                _LessonsTab(course: widget.course),
+                _AssessmentsTab(course: widget.course),
               ],
             ),
           ),
@@ -203,15 +208,294 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-class _LessonsTab extends StatelessWidget {
+class _LessonsTab extends StatefulWidget {
+  final Course course;
+
+  const _LessonsTab({required this.course});
+
+  @override
+  State<_LessonsTab> createState() => _LessonsTabState();
+}
+
+class _LessonsTabState extends State<_LessonsTab> {
+  bool _isLoading = true;
+  List<Module> _modules = [];
+  List<LearningMaterial> _materials = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    try {
+      final courseId = widget.course.id;
+      if (courseId == null) return;
+
+      // Fetch Modules
+      final modulesData = await Supabase.instance.client
+          .from('modules')
+          .select()
+          .eq('course_id', courseId)
+          .order('order_index', ascending: true);
+
+      final modules = (modulesData as List)
+          .map((e) => Module.fromJson(e))
+          .toList();
+
+      // Fetch Course-level Materials (where module_id is null)
+      final materialsData = await Supabase.instance.client
+          .from('learning_materials')
+          .select()
+          .eq('course_id', courseId)
+          .filter('module_id', 'is', null)
+          .order('created_at', ascending: false);
+
+      final materials = (materialsData as List)
+          .map((e) => LearningMaterial.fromJson(e))
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _modules = modules;
+          _materials = materials;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching lesson data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _launchDownloadUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not launch course material: $url')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Featured / Current Lesson Placeholder (Static for now or first module)
+          _FeaturedLessonCard(),
+
+          const SizedBox(height: 16),
+          // Class Forum Button
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ClassForumPage()),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/users.svg',
+                      width: 24,
+                      height: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Class Forum',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Lesson Materials Container
+          if (_materials.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Lesson materials',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _materials.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final material = _materials[index];
+                      return LessonItem(
+                        title: material.title,
+                        fileType: material.fileType ?? 'file',
+                        onTap: () => _launchDownloadUrl(material.fileUrl),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Course Content Container (Modules)
           Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Course Content',
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_modules.isEmpty)
+                  Text(
+                    'No modules yet.',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _modules.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final module = _modules[index];
+                      return _ContentSection(
+                        number: index + 1,
+                        title: module.title,
+                        duration: '14:30', // Placeholder duration
+                        isCompleted: false, // Placeholder completion
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Module Progress Container
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Module Progress',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '0%', // Placeholder
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: 0.0, // Placeholder
+                    backgroundColor: AppColors.accent1,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                    minHeight: 8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '0 of ${_modules.length} lessons completed',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeaturedLessonCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -272,204 +556,7 @@ class _LessonsTab extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 16),
-          // Class Forum Button
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ClassForumPage()),
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SvgPicture.asset(
-                      'assets/icons/users.svg',
-                      width: 24,
-                      height: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Class Forum',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Lesson Materials Container
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Lesson materials',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const LessonItem(
-                  title: 'English Adjectives.pdf',
-                  fileType: 'pdf',
-                ),
-                const SizedBox(height: 8),
-                const LessonItem(
-                  title: 'English Adjectives.pdf',
-                  fileType: 'pdf',
-                ),
-                const SizedBox(height: 8),
-                const LessonItem(
-                  title: 'Additional Resources.pdf',
-                  fileType: 'pdf',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Course Content Container
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Course Content',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _ContentSection(
-                  number: 1,
-                  title: 'Introduction to Basic Literacy',
-                  duration: '14:30',
-                  isCompleted: true,
-                ),
-                const SizedBox(height: 8),
-                _ContentSection(
-                  number: 2,
-                  title: 'Introduction to Basic Literacy',
-                  duration: '14:30',
-                  isCompleted: true,
-                ),
-                const SizedBox(height: 8),
-                _ContentSection(
-                  number: 3,
-                  title: 'Introduction to Basic Literacy',
-                  duration: '14:30',
-                  isCompleted: true,
-                ),
-                const SizedBox(height: 8),
-                _ContentSection(
-                  number: 4,
-                  title: 'Introduction to Basic Literacy',
-                  duration: '14:30',
-                  isCompleted: false,
-                ),
-                const SizedBox(height: 8),
-                _ContentSection(
-                  number: 5,
-                  title: 'Introduction to Basic Literacy',
-                  duration: '14:30',
-                  isCompleted: false,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Module Progress Container
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Module Progress',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '67%',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: 0.67,
-                    backgroundColor: AppColors.accent1,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      AppColors.primary,
-                    ),
-                    minHeight: 8,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '2 of 5 lessons completed',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
+          );
   }
 }
 
@@ -555,9 +642,9 @@ class _ContentSection extends StatelessWidget {
 }
 
 class _AssessmentsTab extends StatelessWidget {
-  final String courseTitle;
+  final Course course;
 
-  const _AssessmentsTab({required this.courseTitle});
+  const _AssessmentsTab({required this.course});
 
   @override
   Widget build(BuildContext context) {
@@ -573,8 +660,8 @@ class _AssessmentsTab extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => AssessmentQuestionsPage(
-                  courseTitle: courseTitle,
-                  quizTitle: 'Quiz 1',
+                  course: course,
+                  quizTitle: 'Quiz 1', // TODO: Dynamic quizzes
                 ),
               ),
             );
@@ -590,8 +677,8 @@ class _AssessmentsTab extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => AssessmentQuestionsPage(
-                  courseTitle: courseTitle,
-                  quizTitle: 'Seatwork 1',
+                  course: course,
+                  quizTitle: 'Seatwork 1', // TODO: Dynamic seatworks
                 ),
               ),
             );

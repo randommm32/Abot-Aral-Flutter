@@ -2,10 +2,51 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/user_model.dart';
 import '../students/take_attendance_page.dart';
 
-class HomeTab extends StatelessWidget {
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
+
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  UserModel? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _getProfile();
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final email = Supabase.instance.client.auth.currentUser?.email ?? '';
+
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .single();
+
+      if (mounted) {
+        setState(() {
+          _user = UserModel.fromJson({
+            ...data,
+            'email': email,
+          });
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,12 +78,12 @@ class HomeTab extends StatelessWidget {
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w400,
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha: 0.9),
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Teacher Maria',
+                              _user?.fullName ?? 'Instructor',
                               style: GoogleFonts.inter(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -51,19 +92,17 @@ class HomeTab extends StatelessWidget {
                             ),
                           ],
                         ),
-                        Container(
-                          child: IconButton(
-                            icon: SvgPicture.asset(
-                              'assets/icons/bell.svg',
-                              width: 25,
-                              height: 25,
-                              colorFilter: const ColorFilter.mode(
-                                Colors.white,
-                                BlendMode.srcIn,
-                              ),
+                        IconButton(
+                          icon: SvgPicture.asset(
+                            'assets/icons/bell.svg',
+                            width: 25,
+                            height: 25,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
                             ),
-                            onPressed: () => _showNotificationsDialog(context),
                           ),
+                          onPressed: () => _showNotificationsDialog(context),
                         ),
                       ],
                     ),
@@ -381,7 +420,7 @@ class _HeaderStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -396,7 +435,7 @@ class _HeaderStatCard extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withOpacity(0.8),
+                  color: Colors.white.withValues(alpha: 0.8),
                 ),
               ),
             ],
@@ -432,7 +471,7 @@ class _NextSessionCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

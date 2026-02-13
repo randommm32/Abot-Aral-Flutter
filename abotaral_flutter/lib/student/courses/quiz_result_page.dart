@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
+import '../../core/models/course_model.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'course_lessons_page.dart';
 import 'courses_page.dart';
 
 class QuizResultPage extends StatelessWidget {
-  final String courseTitle;
+  final Course course;
   final String quizTitle;
   final int score;
   final int totalQuestions;
 
   const QuizResultPage({
     super.key,
-    required this.courseTitle,
+    required this.course,
     required this.quizTitle,
     required this.score,
     required this.totalQuestions,
@@ -79,7 +80,7 @@ class QuizResultPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  courseTitle,
+                  course.title,
                   style: GoogleFonts.inter(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -113,7 +114,7 @@ class QuizResultPage extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (context) => CourseLessonsPage(
-                                courseTitle: courseTitle,
+                                course: course,
                               ),
                             ),
                           );

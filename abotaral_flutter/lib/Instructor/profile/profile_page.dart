@@ -2,15 +2,102 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/user_model.dart';
+import '../auth/sign_in_page.dart';
 import 'edit_profile_page.dart';
 
-class ProfilePage extends StatelessWidget {
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _isLoading = true;
+  UserModel? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _getProfile();
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final email = Supabase.instance.client.auth.currentUser!.email ?? '';
+
+      // Try fetching with joined facilitator profile
+      try {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('*, facilitator_profiles(*)')
+            .eq('id', userId)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _user = UserModel.fromJson({
+              ...data,
+              'email': email,
+            });
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        // Fallback if relationship doesn't exist or other error
+        debugPrint('Error fetching joined profile: $e');
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('id', userId)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _user = UserModel.fromJson({
+              ...data,
+              'email': email,
+            });
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditInfoDialog() async {
+    final result = await showDialog(
+      context: context,
+      builder: (context) => _EditProfileDialog(user: _user),
+    );
+
+    if (result == true) {
+      _getProfile();
+    }
+  }
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -30,7 +117,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => Navigator.pop(dialogContext),
                     child: const Icon(
                       Icons.close,
                       color: AppColors.textSecondary,
@@ -52,7 +139,7 @@ class ProfilePage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: () => Navigator.pop(dialogContext),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
@@ -76,12 +163,24 @@ class ProfilePage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(
-                          context,
-                          rootNavigator: true,
-                        ).pushNamedAndRemoveUntil('/signin', (route) => false);
+                      onTap: () async {
+                        try {
+                          Navigator.pop(dialogContext);
+                          await Supabase.instance.client.auth.signOut();
+                          if (context.mounted) {
+                            Navigator.of(
+                              context,
+                              rootNavigator: true,
+                            ).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const SignInPage(),
+                              ),
+                              (route) => false,
+                            );
+                          }
+                        } catch (e) {
+                          debugPrint('Error signing out: $e');
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -169,7 +268,9 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
-      body: SafeArea(
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,17 +322,25 @@ class ProfilePage extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: AppColors.accent3,
                             shape: BoxShape.circle,
+                            image: _user?.avatarUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(_user!.avatarUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          child: Center(
-                            child: Text(
-                              'TM',
-                              style: GoogleFonts.inter(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                          child: _user?.avatarUrl == null
+                              ? Center(
+                                  child: Text(
+                                    _user?.initials ?? 'T',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : null,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -241,7 +350,7 @@ class ProfilePage extends StatelessWidget {
                               Row(
                                 children: [
                                   Text(
-                                    'Teacher Maria',
+                                    _user?.fullName ?? 'Instructor',
                                     style: GoogleFonts.inter(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -249,21 +358,22 @@ class ProfilePage extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.3,
+                                  GestureDetector(
+                                    onTap: _showEditInfoDialog,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.3),
+                                        shape: BoxShape.circle,
                                       ),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: SvgPicture.asset(
-                                      'assets/instructor_icons/edit.svg',
-                                      width: 12,
-                                      height: 12,
-                                      colorFilter: const ColorFilter.mode(
-                                        Colors.white,
-                                        BlendMode.srcIn,
+                                      child: SvgPicture.asset(
+                                        'assets/instructor_icons/edit.svg',
+                                        width: 12,
+                                        height: 12,
+                                        colorFilter: const ColorFilter.mode(
+                                          Colors.white,
+                                          BlendMode.srcIn,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -271,12 +381,23 @@ class ProfilePage extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'ALS Facilitator',
+                                _user?.role ?? 'ALS Facilitator',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   color: Colors.white.withValues(alpha: 0.8),
                                 ),
                               ),
+                              if (_user?.facilitatorProfile?.specialization != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  _user!.facilitatorProfile!.specialization!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 2),
                               Row(
                                 children: [
@@ -291,12 +412,10 @@ class ProfilePage extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Quezon City, Philippines',
+                                    _user?.facilitatorProfile?.workplaceAssignment ?? 'No Workplace Assigned',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.7,
-                                      ),
+                                      color: Colors.white.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 ],
@@ -384,19 +503,19 @@ class ProfilePage extends StatelessWidget {
                     _ContactCard(
                       icon: 'assets/instructor_icons/mail.svg',
                       label: 'Email',
-                      value: 'teacher.maria@als.gov.ph',
+                      value: _user?.email ?? 'Scanning...',
                     ),
                     const SizedBox(height: 8),
                     _ContactCard(
                       icon: 'assets/instructor_icons/phone.svg',
                       label: 'Phone',
-                      value: '+63 912 345 6789',
+                      value: '+63 912 345 6789', // TODO: Add to UserModel
                     ),
                     const SizedBox(height: 8),
                     _ContactCard(
                       icon: 'assets/instructor_icons/pin.svg',
                       label: 'Office Location',
-                      value: 'Barangay Hall, Quezon City',
+                      value: _user?.facilitatorProfile?.workplaceAssignment ?? 'Not Assigned', 
                     ),
                     const SizedBox(height: 24),
 
@@ -413,14 +532,18 @@ class ProfilePage extends StatelessWidget {
                     _SettingsItem(
                       icon: 'assets/instructor_icons/settings.svg',
                       label: 'Account Settings',
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final bool? result = await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) =>
                                 const InstructorEditProfilePage(),
                           ),
                         );
+                        
+                        if (result == true) {
+                          _getProfile();
+                        }
                       },
                     ),
                     const SizedBox(height: 8),
@@ -782,5 +905,262 @@ class _NotificationDialogItem extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _EditProfileDialog extends StatefulWidget {
+  final UserModel? user;
+  const _EditProfileDialog({this.user});
+
+  @override
+  State<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<_EditProfileDialog> {
+  late TextEditingController _firstNameController;
+  late TextEditingController _middleNameController;
+  late TextEditingController _lastNameController;
+  late TextEditingController _suffixController;
+  
+  bool _isLoading = false;
+  String? _avatarUrl;
+  File? _imageFile;
+  Uint8List? _imageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController(text: widget.user?.firstName);
+    _middleNameController = TextEditingController(text: widget.user?.middleName);
+    _lastNameController = TextEditingController(text: widget.user?.lastName);
+    _suffixController = TextEditingController(text: widget.user?.suffix);
+    _avatarUrl = widget.user?.avatarUrl;
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _middleNameController.dispose();
+    _lastNameController.dispose();
+    _suffixController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+        final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        );
+
+        if (result != null) {
+        if (kIsWeb) {
+            if (result.files.single.bytes != null) {
+                setState(() {
+                _imageBytes = result.files.single.bytes;
+                _imageFile = null; 
+                });
+            }
+        } else {
+            if (result.files.single.path != null) {
+                setState(() {
+                _imageFile = File(result.files.single.path!);
+                _imageBytes = null;
+                });
+            }
+        }
+        }
+    } catch (e) {
+        debugPrint('Error picking image: $e');
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      
+      String? newAvatarUrl;
+      final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.png';
+
+      if (kIsWeb && _imageBytes != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .uploadBinary(fileName, _imageBytes!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      } else if (!kIsWeb && _imageFile != null) {
+        await Supabase.instance.client.storage
+            .from('avatars')
+            .upload(fileName, _imageFile!);
+        newAvatarUrl = Supabase.instance.client.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+      }
+
+      final updates = <String, dynamic>{
+        'first_name': _firstNameController.text.trim(),
+        'middle_name': _middleNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'suffix': _suffixController.text.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (newAvatarUrl != null) {
+        updates['avatar_url'] = newAvatarUrl;
+      }
+
+      await Supabase.instance.client
+          .from('profiles')
+          .update(updates)
+          .eq('id', userId);
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+       backgroundColor: Colors.white,
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+       child: SingleChildScrollView(
+         padding: const EdgeInsets.all(24),
+         child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+                Text(
+                    'Edit Info',
+                    style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                    ),
+                ),
+                const SizedBox(height: 24),
+                // Avatar
+                GestureDetector(
+                    onTap: _pickImage,
+                    child: Stack(
+                        children: [
+                            Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                    color: AppColors.accent3,
+                                    shape: BoxShape.circle,
+                                    image: (kIsWeb && _imageBytes != null)
+                                        ? DecorationImage(
+                                            image: MemoryImage(_imageBytes!),
+                                            fit: BoxFit.cover,
+                                            )
+                                        : (_imageFile != null
+                                            ? DecorationImage(
+                                                image: FileImage(_imageFile!),
+                                                fit: BoxFit.cover,
+                                                )
+                                            : (_avatarUrl != null
+                                                ? DecorationImage(
+                                                    image: NetworkImage(_avatarUrl!),
+                                                    fit: BoxFit.cover,
+                                                    )
+                                                : null)),
+                                ),
+                                child: (_imageFile == null && _imageBytes == null && _avatarUrl == null)
+                                ? const Center(child: Icon(Icons.person, size: 40, color: Colors.white))
+                                : null,
+                            ),
+                            Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.white,
+                                        size: 16,
+                                    ),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+                const SizedBox(height: 24),
+                _buildTextField('First Name', _firstNameController),
+                const SizedBox(height: 12),
+                _buildTextField('Middle Name', _middleNameController),
+                const SizedBox(height: 12),
+                _buildTextField('Last Name', _lastNameController),
+                const SizedBox(height: 12),
+                _buildTextField('Suffix', _suffixController),
+                const SizedBox(height: 24),
+                Row(
+                    children: [
+                        Expanded(
+                            child: OutlinedButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: AppColors.border),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textPrimary)),
+                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: ElevatedButton(
+                                onPressed: _isLoading ? null : _saveChanges,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: _isLoading 
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                    : Text('Save', style: GoogleFonts.inter(color: Colors.white)),
+                            ),
+                        ),
+                    ],
+                )
+            ],
+         ),
+       ),
+    );
+  }
+  
+  Widget _buildTextField(String label, TextEditingController controller) {
+      return TextField(
+          controller: controller,
+          decoration: InputDecoration(
+              labelText: label,
+              labelStyle: GoogleFonts.inter(color: AppColors.textSecondary),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+      );
   }
 }

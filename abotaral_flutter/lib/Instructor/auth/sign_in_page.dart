@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/student_widgets/custom_text_field.dart';
 import '../../core/student_widgets/custom_button.dart';
 import 'forgot_password_page.dart';
 import '../instructor_shell.dart';
+import '../../student/student_shell.dart';
+import '../../core/services/user_service.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -45,10 +48,66 @@ class _SignInPageState extends State<SignInPage> {
     return null;
   }
 
-  void _handleSignIn() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const InstructorShell()),
-    );
+  bool _isLoading = false;
+
+  Future<void> _handleSignIn() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final role = await UserService.getUserRole(userId);
+
+      if (mounted) {
+        if (role == 'facilitator') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const InstructorShell()),
+          );
+        } else {
+          // Default to Student Shell
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const StudentShell()),
+          );
+        }
+      }
+    } on AuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Unexpected error occurred'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -153,7 +212,11 @@ class _SignInPageState extends State<SignInPage> {
                 ),
                 const SizedBox(height: 32),
                 // Sign in button
-                CustomButton(text: 'Sign In', onPressed: _handleSignIn),
+                CustomButton(
+                  text: 'Sign In',
+                  onPressed: _handleSignIn,
+                  isLoading: _isLoading,
+                ),
               ],
             ),
           ),

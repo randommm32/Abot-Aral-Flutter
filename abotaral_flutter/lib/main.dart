@@ -3,7 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/constants/app_colors.dart';
 import 'landingpage.dart';
 
-void main() {
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://enzbcnvhczuzjlrvphix.supabase.co',
+    anonKey: 'sb_publishable_kGOjIM6NsQcmWWT0nCcEgg_32aJeQbK',
+  );
+
   runApp(const MainApp());
 }
 

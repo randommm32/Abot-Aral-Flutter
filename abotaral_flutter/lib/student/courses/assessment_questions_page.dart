@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/models/course_model.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/student_widgets/quiz_option.dart';
 import 'quiz_result_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class AssessmentQuestionsPage extends StatefulWidget {
-  final String courseTitle;
+  final Course course;
   final String quizTitle;
 
   const AssessmentQuestionsPage({
     super.key,
-    required this.courseTitle,
+    required this.course,
     required this.quizTitle,
   });
 
@@ -69,7 +70,7 @@ class _AssessmentQuestionsPageState extends State<AssessmentQuestionsPage> {
       context,
       MaterialPageRoute(
         builder: (context) => QuizResultPage(
-          courseTitle: widget.courseTitle,
+          course: widget.course,
           quizTitle: widget.quizTitle,
           score: 1,
           totalQuestions: _totalQuestions,
@@ -130,7 +131,7 @@ class _AssessmentQuestionsPageState extends State<AssessmentQuestionsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.courseTitle,
+                  widget.course.title,
                   style: GoogleFonts.inter(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

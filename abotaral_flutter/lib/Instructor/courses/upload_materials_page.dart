@@ -1,14 +1,23 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/models/learning_material_model.dart';
 
 class UploadMaterialsPage extends StatefulWidget {
+  final String? courseId;
+  final String? moduleId;
   final String courseTitle;
   final String learningMaterialTitle;
 
   const UploadMaterialsPage({
     super.key,
+    this.courseId,
+    this.moduleId,
     required this.courseTitle,
     required this.learningMaterialTitle,
   });
@@ -24,11 +33,127 @@ class _UploadMaterialsPageState extends State<UploadMaterialsPage> {
   bool _makeDownloadable = false;
   bool _trackViews = false;
 
+  PlatformFile? _pickedFile;
+  bool _isLoading = false;
+
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'png', 'mp4'],
+    );
+
+    if (result != null) {
+      setState(() {
+        _pickedFile = result.files.first;
+        // Auto-fill title if empty
+        if (_titleController.text.isEmpty) {
+          _titleController.text = _pickedFile!.name;
+        }
+      });
+    }
+  }
+
+  Future<void> _uploadMaterial() async {
+    if (_titleController.text.isEmpty || _pickedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide a title and select a file'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (widget.courseId == null && widget.moduleId == null) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: No Course or Module context provided.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      // 1. Upload File
+      final fileExt = _pickedFile!.extension ?? 'file';
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${_pickedFile!.name}';
+      final filePath = '${user.id}/$fileName';
+      
+      // Attempt to use 'learning_materials' bucket, fallback to 'course_materials' if needed by user setup
+      // Using 'course_materials' as per user instruction
+      const bucketName = 'course_materials'; 
+
+      if (kIsWeb) {
+        await Supabase.instance.client.storage
+            .from(bucketName)
+            .uploadBinary(filePath, _pickedFile!.bytes!);
+      } else {
+        await Supabase.instance.client.storage
+            .from(bucketName)
+            .upload(filePath, File(_pickedFile!.path!));
+      }
+
+      final fileUrl = Supabase.instance.client.storage
+          .from(bucketName)
+          .getPublicUrl(filePath);
+
+      // 2. Insert Record
+      final material = LearningMaterial(
+        courseId: widget.courseId,
+        moduleId: widget.moduleId,
+        title: _titleController.text,
+        description: _descriptionController.text,
+        fileUrl: fileUrl,
+        fileType: fileExt,
+        uploaderId: user.id,
+      );
+
+      await Supabase.instance.client
+          .from('learning_materials')
+          .insert(material.toJson());
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Material uploaded successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      Navigator.pop(context);
+
+    } catch (e) {
+      debugPrint('Error uploading material: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -200,15 +325,7 @@ class _UploadMaterialsPageState extends State<UploadMaterialsPage> {
                     ),
                     const SizedBox(height: 8),
                     GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'File picker functionality coming soon!',
-                            ),
-                          ),
-                        );
-                      },
+                      onTap: _pickFile,
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -243,7 +360,9 @@ class _UploadMaterialsPageState extends State<UploadMaterialsPage> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Click to Upload Files',
+                              _pickedFile != null 
+                                ? 'Selected: ${_pickedFile!.name}' 
+                                : 'Click to Upload Files',
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -252,7 +371,9 @@ class _UploadMaterialsPageState extends State<UploadMaterialsPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'PDF, Images, Videos, Documents',
+                             _pickedFile != null
+                                ? '${(_pickedFile!.size / 1024).toStringAsFixed(2)} KB' 
+                                : 'PDF, Images, Videos, Documents',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
@@ -308,25 +429,20 @@ class _UploadMaterialsPageState extends State<UploadMaterialsPage> {
                       width: double.infinity,
                       height: 45,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Materials uploaded successfully!'),
+                        onPressed: _isLoading ? null : _uploadMaterial,
+                        icon: _isLoading 
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : SvgPicture.asset(
+                            'assets/instructor_icons/upload.svg',
+                            width: 18,
+                            height: 18,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
                             ),
-                          );
-                        },
-                        icon: SvgPicture.asset(
-                          'assets/instructor_icons/upload.svg',
-                          width: 18,
-                          height: 18,
-                          colorFilter: const ColorFilter.mode(
-                            Colors.white,
-                            BlendMode.srcIn,
                           ),
-                        ),
                         label: Text(
-                          'Upload Materials',
+                          _isLoading ? 'Uploading...' : 'Upload Materials',
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,

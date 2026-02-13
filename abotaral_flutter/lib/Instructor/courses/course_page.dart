@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'create_course_page.dart';
@@ -7,11 +8,47 @@ import 'learning_material_details_page.dart';
 import 'manage_materials_page.dart';
 import '../students/course_reports_page.dart';
 
-class CourseTab extends StatelessWidget {
+class CourseTab extends StatefulWidget {
   const CourseTab({super.key});
 
   @override
+  State<CourseTab> createState() => _CourseTabState();
+}
+
+class _CourseTabState extends State<CourseTab> {
+  final _userId = Supabase.instance.client.auth.currentUser?.id;
+  late Stream<List<Map<String, dynamic>>> _coursesStream;
+  String _selectedSort = 'Date (Newest)';
+
+  @override
+  void initState() {
+    super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
+    var query = Supabase.instance.client
+        .from('courses')
+        .stream(primaryKey: ['id'])
+        .eq('facilitator_id', _userId!);
+
+    if (_selectedSort == 'Date (Newest)') {
+      _coursesStream = query.order('created_at', ascending: false);
+    } else if (_selectedSort == 'Date (Oldest)') {
+      _coursesStream = query.order('created_at', ascending: true);
+    } else if (_selectedSort == 'Name (A-Z)') {
+      _coursesStream = query.order('title', ascending: true);
+    } else if (_selectedSort == 'Name (Z-A)') {
+      _coursesStream = query.order('title', ascending: false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_userId == null) {
+      return const Center(child: Text('Please log in'));
+    }
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
@@ -39,41 +76,49 @@ class CourseTab extends StatelessWidget {
                             color: Colors.white,
                           ),
                         ),
-                        Container(
-                          child: IconButton(
-                            icon: SvgPicture.asset(
-                              'assets/icons/bell.svg',
-                              width: 25,
-                              height: 25,
-                              colorFilter: const ColorFilter.mode(
-                                Colors.white,
-                                BlendMode.srcIn,
-                              ),
+                        IconButton(
+                          icon: SvgPicture.asset(
+                            'assets/icons/bell.svg',
+                            width: 25,
+                            height: 25,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
                             ),
-                            onPressed: () => _showNotificationsDialog(context),
                           ),
+                          onPressed: () => _showNotificationsDialog(context),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
                     // Stats Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _HeaderStatCard(value: '4', label: 'Active'),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _HeaderStatCard(
-                            value: '55',
-                            label: 'Learners',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _HeaderStatCard(value: '23', label: 'Modules'),
-                        ),
-                      ],
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _coursesStream,
+                      builder: (context, snapshot) {
+                        final count = snapshot.data?.length ?? 0;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: _HeaderStatCard(
+                                  value: count.toString(), label: 'Active'),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _HeaderStatCard(
+                                value: '55', // Placeholder for total learners
+                                label: 'Learners',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _HeaderStatCard(
+                                value: '23', // Placeholder for total modules
+                                label: 'Modules',
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -130,109 +175,106 @@ class CourseTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Active Courses',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Active Courses',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            setState(() {
+                              _selectedSort = value;
+                              _initStream();
+                            });
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'Date (Newest)',
+                              child: Text('Date (Newest)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Date (Oldest)',
+                              child: Text('Date (Oldest)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Name (A-Z)',
+                              child: Text('Name (A-Z)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'Name (Z-A)',
+                              child: Text('Name (Z-A)'),
+                            ),
+                          ],
+                          child: Row(
+                            children: [
+                              Text(
+                                _selectedSort,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 1',
-                      subtitle: 'English and Filipino',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 1',
-                                  courseSubtitle: 'English and Filipino',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 2',
-                      subtitle: 'Scientific and Critical Thinking Skills',
-                      learners: 10,
-                      modules: 4,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 2',
-                                  courseSubtitle:
-                                      'Scientific and Critical Thinking Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 3',
-                      subtitle: 'Mathematical and Problem-Solving Skills',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 3',
-                                  courseSubtitle:
-                                      'Mathematical and Problem-Solving Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 4',
-                      subtitle: 'Life and Career Skills',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 4',
-                                  courseSubtitle: 'Life and Career Skills',
-                                ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _LearningStrandCard(
-                      title: 'Learning Strand 5',
-                      subtitle: 'Understanding the Self and Society',
-                      learners: 12,
-                      modules: 5,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const LearningMaterialDetailsPage(
-                                  courseTitle: 'Learning Material 5',
-                                  courseSubtitle:
-                                      'Understanding the Self and Society',
-                                ),
-                          ),
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: _coursesStream,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(child: Text('Error: ${snapshot.error}'));
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final courses = snapshot.data!;
+                        if (courses.isEmpty) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Text('No courses yet. Create one!'),
+                            ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: courses.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final course = courses[index];
+                            return _LearningStrandCard(
+                              title: course['title'] ?? 'Untitled',
+                              subtitle: course['category'] ?? 'No category',
+                              learners: course['max_learners'] ?? 0,
+                              modules: 0, // TODO: Fetch module count
+                              imageUrl: course['cover_image_url'],
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        LearningMaterialDetailsPage(
+                                      courseId: course['id'],
+                                      courseTitle: course['title'],
+                                      courseSubtitle: course['category'],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
                       },
                     ),
@@ -260,7 +302,7 @@ class CourseTab extends StatelessWidget {
                                   builder: (context) =>
                                       const ManageMaterialsPage(
                                         learningMaterialTitle:
-                                            'Learning Material 1',
+                                            'Learning Material 1', // Placeholder
                                       ),
                                 ),
                               );
@@ -277,7 +319,7 @@ class CourseTab extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => const CourseReportsPage(
-                                    courseTitle: 'Learning Material 1',
+                                    courseTitle: 'Learning Material 1', // Placeholder
                                     courseSubtitle: 'English and Filipino',
                                   ),
                                 ),
@@ -299,7 +341,8 @@ class CourseTab extends StatelessWidget {
   }
 
   void _showNotificationsDialog(BuildContext context) {
-    showDialog(
+    // ... existing implementation ...
+     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.white,
@@ -364,7 +407,7 @@ class _HeaderStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -383,7 +426,7 @@ class _HeaderStatCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -397,6 +440,7 @@ class _LearningStrandCard extends StatelessWidget {
   final String subtitle;
   final int learners;
   final int modules;
+  final String? imageUrl;
   final VoidCallback onTap;
 
   const _LearningStrandCard({
@@ -404,6 +448,7 @@ class _LearningStrandCard extends StatelessWidget {
     required this.subtitle,
     required this.learners,
     required this.modules,
+    this.imageUrl,
     required this.onTap,
   });
 
@@ -420,25 +465,33 @@ class _LearningStrandCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Book icon container
+            // Image or Book icon container
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
                 color: AppColors.accent1,
                 borderRadius: BorderRadius.circular(10),
+                image: imageUrl != null && imageUrl!.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(imageUrl!),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              child: Center(
-                child: SvgPicture.asset(
-                  'assets/icons/book-open.svg',
-                  width: 24,
-                  height: 24,
-                  colorFilter: const ColorFilter.mode(
-                    AppColors.primary,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
+              child: imageUrl != null && imageUrl!.isNotEmpty
+                  ? null
+                  : Center(
+                      child: SvgPicture.asset(
+                        'assets/icons/book-open.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: const ColorFilter.mode(
+                          AppColors.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(width: 12),
             // Content

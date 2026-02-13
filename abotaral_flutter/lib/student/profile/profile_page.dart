@@ -1,12 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
+import '../../landingpage.dart';
 import '../auth/sign_in_page.dart';
 import 'edit_profile_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _isLoading = true;
+  String _fullName = '';
+  String _email = '';
+  String _initials = '';
+  String? _avatarUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _getProfile();
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final email = Supabase.instance.client.auth.currentUser!.email ?? '';
+      
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .single();
+
+      final String firstName = data['first_name'] ?? '';
+      final String middleName = data['middle_name'] ?? '';
+      final String lastName = data['last_name'] ?? '';
+      final String suffix = data['suffix'] ?? '';
+      final String? avatarUrl = data['avatar_url'];
+
+      // Construct full name
+      final StringBuffer nameBuffer = StringBuffer();
+      if (firstName.isNotEmpty) nameBuffer.write(firstName);
+      if (middleName.isNotEmpty) nameBuffer.write(' $middleName');
+      if (lastName.isNotEmpty) nameBuffer.write(' $lastName');
+      if (suffix.isNotEmpty) nameBuffer.write(' $suffix');
+
+      final fullName = nameBuffer.toString().trim().isEmpty 
+          ? 'Student' 
+          : nameBuffer.toString().trim();
+
+      // Get initials
+      String initials = '';
+      if (firstName.isNotEmpty) initials += firstName[0];
+      if (lastName.isNotEmpty) initials += lastName[0];
+      if (initials.isEmpty) initials = 'S'; // Default
+
+      if (mounted) {
+        setState(() {
+          _fullName = fullName;
+          _email = email;
+          _initials = initials;
+          _avatarUrl = avatarUrl;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      if (mounted) {
+        setState(() {
+          _fullName = 'Student';
+          _email = Supabase.instance.client.auth.currentUser?.email ?? '';
+          _initials = 'S';
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,46 +134,57 @@ class ProfilePage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.border),
                       ),
-                      child: Column(
-                        children: [
-                          // Avatar
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: AppColors.accent1,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                'J',
-                                style: GoogleFonts.inter(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
+                              children: [
+                                // Avatar
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent1,
+                                    shape: BoxShape.circle,
+                                    image: _avatarUrl != null
+                                        ? DecorationImage(
+                                            image: NetworkImage(_avatarUrl!),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: _avatarUrl == null
+                                      ? Center(
+                                          child: Text(
+                                            _initials.toUpperCase(),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 36,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
                                 ),
-                              ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _fullName,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _email,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Juan Dela Cruz',
-                            style: GoogleFonts.inter(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'student@als.edu.ph',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                     const SizedBox(height: 16),
                     // Learning Progress Card
@@ -288,13 +374,17 @@ class ProfilePage extends StatelessWidget {
                     const SizedBox(height: 24),
                     // Account Settings Button
                     GestureDetector(
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final bool? result = await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const EditProfilePage(),
                           ),
                         );
+                        
+                        if (result == true) {
+                          _getProfile();
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -393,7 +483,7 @@ class ProfilePage extends StatelessWidget {
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
@@ -405,7 +495,7 @@ class ProfilePage extends StatelessWidget {
               Align(
                 alignment: Alignment.topRight,
                 child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => Navigator.pop(dialogContext),
                   child: Icon(
                     Icons.close,
                     color: AppColors.textSecondary,
@@ -451,7 +541,7 @@ class ProfilePage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(dialogContext),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textPrimary,
                         side: const BorderSide(color: AppColors.border),
@@ -472,18 +562,21 @@ class ProfilePage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         // Close dialog and navigate to sign in
-                        Navigator.pop(context);
-                        Navigator.of(
-                          context,
-                          rootNavigator: true,
-                        ).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const SignInPage(),
-                          ),
-                          (route) => false,
-                        );
+                        Navigator.pop(dialogContext);
+                        await Supabase.instance.client.auth.signOut();
+                        if (context.mounted) {
+                          Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (context) => const LandingPage(),
+                            ),
+                            (route) => false,
+                          );
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.error,

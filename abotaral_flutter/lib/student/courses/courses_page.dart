@@ -4,8 +4,43 @@ import '../../core/constants/app_colors.dart';
 import 'course_lessons_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class CoursesPage extends StatelessWidget {
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/course_model.dart';
+
+class CoursesPage extends StatefulWidget {
   const CoursesPage({super.key});
+
+  @override
+  State<CoursesPage> createState() => _CoursesPageState();
+}
+
+class _CoursesPageState extends State<CoursesPage> {
+  late Stream<List<Map<String, dynamic>>> _coursesStream;
+  String _selectedSort = 'Date (Newest)';
+
+  @override
+  void initState() {
+    super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
+    var query = Supabase.instance.client.from('courses').stream(primaryKey: ['id']);
+
+    if (_selectedSort == 'Date (Newest)') {
+      _coursesStream = query.order('created_at', ascending: false);
+    } else if (_selectedSort == 'Date (Oldest)') {
+      _coursesStream = query.order('created_at', ascending: true);
+    } else if (_selectedSort == 'Name (A-Z)') {
+      _coursesStream = query.order('title', ascending: true);
+    } else if (_selectedSort == 'Name (Z-A)') {
+      _coursesStream = query.order('title', ascending: false);
+    } else {
+      // Default
+      _coursesStream = query.order('created_at', ascending: false);
+    }
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,41 +79,101 @@ class CoursesPage extends StatelessWidget {
                 ],
               ),
             ),
-            // Course List
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(20),
+            // Sorting Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.54,
-                    lessonCount: 14,
-                    isCompleted: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
+                  Text(
+                    'All Courses',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.89,
-                    lessonCount: 67,
-                    showDownload: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
-                  ),
-                  const SizedBox(height: 12),
-                  _CourseItem(
-                    title: 'Learning Material 2',
-                    subtitle: 'Science and Math',
-                    progress: 0.89,
-                    lessonCount: 67,
-                    isCompleted: true,
-                    onContinue: () =>
-                        _navigateToCourse(context, 'Learning Material 2'),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      _selectedSort = value;
+                      _initStream();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'Date (Newest)',
+                        child: Text('Date (Newest)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Date (Oldest)',
+                        child: Text('Date (Oldest)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Name (A-Z)',
+                        child: Text('Name (A-Z)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Name (Z-A)',
+                        child: Text('Name (Z-A)'),
+                      ),
+                    ],
+                    child: Row(
+                      children: [
+                        Text(
+                          _selectedSort,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                      ],
+                    ),
                   ),
                 ],
+              ),
+            ),
+            // Course List
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _coursesStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final courses =
+                      snapshot.data!.map((e) => Course.fromJson(e)).toList();
+
+                  if (courses.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No courses available.',
+                        style: GoogleFonts.inter(color: AppColors.textSecondary),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: courses.length,
+                    separatorBuilder: (context, _) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final course = courses[index];
+                      // TODO: Fetch progress for this student
+                      return _CourseItem(
+                        title: course.title,
+                        subtitle: course.category,
+                        progress: 0.0, // Default to 0 for now
+                        lessonCount: 0, // TODO: Fetch lesson count
+                        isCompleted: false,
+                        onContinue: () => _navigateToCourse(context, course),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -87,11 +182,11 @@ class CoursesPage extends StatelessWidget {
     );
   }
 
-  void _navigateToCourse(BuildContext context, String title) {
+  void _navigateToCourse(BuildContext context, Course course) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CourseLessonsPage(courseTitle: title),
+        builder: (context) => CourseLessonsPage(course: course),
       ),
     );
   }
@@ -103,7 +198,6 @@ class _CourseItem extends StatelessWidget {
   final double progress;
   final int lessonCount;
   final bool isCompleted;
-  final bool showDownload;
   final VoidCallback? onContinue;
 
   const _CourseItem({
@@ -112,7 +206,6 @@ class _CourseItem extends StatelessWidget {
     required this.progress,
     required this.lessonCount,
     this.isCompleted = false,
-    this.showDownload = false,
     this.onContinue,
   });
 
@@ -216,30 +309,7 @@ class _CourseItem extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (showDownload) ...[
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: SvgPicture.asset(
-                    'assets/icons/download.svg',
-                    width: 16,
-                    height: 16,
-                  ),
-                  label: Text(
-                    'Download',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
+
               TextButton(
                 onPressed: onContinue,
                 style: TextButton.styleFrom(
@@ -273,7 +343,7 @@ class _CourseItem extends StatelessWidget {
 void _showNotificationsDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (_) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,

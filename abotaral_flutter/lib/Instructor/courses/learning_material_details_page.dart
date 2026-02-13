@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/models/module_model.dart';
+import '../../core/models/learning_material_model.dart';
 import 'schedule_session_page.dart';
 import 'create_assessment_page.dart';
 import 'add_module_page.dart';
@@ -10,13 +13,16 @@ import 'module_details_page.dart';
 import 'upload_materials_page.dart';
 import '../students/course_reports_page.dart';
 import '../students/enrolled_learners_page.dart';
+import 'widgets/learning_material_item.dart';
 
 class LearningMaterialDetailsPage extends StatelessWidget {
+  final String courseId;
   final String courseTitle;
   final String courseSubtitle;
 
   const LearningMaterialDetailsPage({
     super.key,
+    required this.courseId,
     required this.courseTitle,
     required this.courseSubtitle,
   });
@@ -59,7 +65,7 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -78,7 +84,7 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                       courseSubtitle,
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -174,7 +180,10 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) =>
-                                    AddModulePage(courseTitle: courseTitle),
+                                    AddModulePage(
+                                      courseId: courseId,
+                                      courseTitle: courseTitle,
+                                    ),
                               ),
                             );
                           },
@@ -215,72 +224,97 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _ModuleCard(
-                      number: 1,
-                      title: 'Introduction to Basic Literacy',
-                      lessons: 5,
-                      duration: '2 hours',
-                      status: 'Completed',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ModuleDetailsPage(
-                              moduleTitle: 'Introduction to Basic Literacy',
-                              learningMaterialTitle: courseSubtitle,
-                              lessonCount: 5,
-                              completedCount: 2,
-                              duration: '2 hours',
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: Supabase.instance.client
+                          .from('modules')
+                          .stream(primaryKey: ['id'])
+                          .eq('course_id', courseId)
+                          .order('order_index', ascending: true),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Text('Error loading modules: ${snapshot.error}'),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Padding(
+                            padding: EdgeInsets.only(bottom: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        
+                        final modules = snapshot.data!.map((e) => Module.fromJson(e)).toList();
+
+                        if (modules.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                children: [
+                                  SvgPicture.asset(
+                                    'assets/instructor_icons/analytics.svg',
+                                    width: 40,
+                                    height: 40,
+                                    colorFilter: const ColorFilter.mode(AppColors.textSecondary, BlendMode.srcIn),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No Module Yet',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                          );
+                        }
+
+                        return Column(
+                          children: modules.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final module = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _ModuleCard(
+                                number: index + 1,
+                                title: module.title,
+                                lessons: 0, // TODO: Fetch lesson count
+                                duration: '0 mins', // TODO: Fetch duration
+                                status: 'Not Started', // TODO: Calculate status
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ModuleDetailsPage(
+                                        courseId: courseId,
+                                        moduleId: module.id, 
+                                        moduleTitle: module.title,
+                                        learningMaterialTitle: courseSubtitle,
+                                        lessonCount: 0, // Placeholder
+                                        completedCount: 0, // Placeholder
+                                        duration: '0 mins', // Placeholder
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          }).toList(),
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
-                    _ModuleCard(
-                      number: 2,
-                      title: 'Reading Comprehension',
-                      lessons: 8,
-                      duration: '3 hours',
-                      status: 'In Progress',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ModuleDetailsPage(
-                              moduleTitle: 'Reading Comprehension',
-                              learningMaterialTitle: courseSubtitle,
-                              lessonCount: 8,
-                              completedCount: 4,
-                              duration: '3 hours',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _ModuleCard(
-                      number: 3,
-                      title: 'Writing Fundamentals',
-                      lessons: 8,
-                      duration: '2.5 hours',
-                      status: 'Not Started',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ModuleDetailsPage(
-                              moduleTitle: 'Writing Fundamentals',
-                              learningMaterialTitle: courseSubtitle,
-                              lessonCount: 8,
-                              completedCount: 0,
-                              duration: '2.5 hours',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12), // Adjusted spacing from 24 to 12
 
                     // Class Forum Button
                     GestureDetector(
@@ -350,6 +384,7 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => UploadMaterialsPage(
+                                  courseId: courseId,
                                   courseTitle: courseTitle,
                                   learningMaterialTitle: courseSubtitle,
                                 ),
@@ -369,7 +404,7 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 SvgPicture.asset(
-                                  'assets/instructor_icons/plus.svg',
+                                  'assets/instructor_icons/upload.svg',
                                   width: 16,
                                   height: 16,
                                   colorFilter: const ColorFilter.mode(
@@ -393,19 +428,51 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _MaterialItem(
-                      title: 'English Adjectives.pdf',
-                      icon: 'assets/icons/file-text.svg',
-                    ),
-                    const SizedBox(height: 8),
-                    _MaterialItem(
-                      title: 'Reading Exercise.pdf',
-                      icon: 'assets/icons/file-text.svg',
-                    ),
-                    const SizedBox(height: 8),
-                    _MaterialItem(
-                      title: 'Vocabulary List.pdf',
-                      icon: 'assets/icons/file-text.svg',
+                    StreamBuilder<List<Map<String, dynamic>>>(
+                      stream: Supabase.instance.client
+                          .from('learning_materials')
+                          .stream(primaryKey: ['id'])
+                          .eq('course_id', courseId)
+                          .order('created_at', ascending: false),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Text('Error loading materials: ${snapshot.error}'),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Padding(
+                            padding: EdgeInsets.only(bottom: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+
+                        // Filter for course-level materials (where module_id is null)
+                        final materials = snapshot.data!
+                            .where((e) => e['module_id'] == null)
+                            .map((e) => LearningMaterial.fromJson(e))
+                            .toList();
+
+                        if (materials.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Text(
+                              'No materials uploaded yet.',
+                              style: GoogleFonts.inter(color: AppColors.textSecondary),
+                            ),
+                          );
+                        }
+
+                        return Column(
+                          children: materials.map((material) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: LearningMaterialItem(material: material),
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                     // Enrolled Learners Section
@@ -501,7 +568,7 @@ class LearningMaterialDetailsPage extends StatelessWidget {
                                       color: Colors.white,
                                       width: 2,
                                     ),
-                                  ),
+                                     ),
                                   child: Center(
                                     child: Text(
                                       '+7',
@@ -632,7 +699,7 @@ class _HeaderStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -651,7 +718,7 @@ class _HeaderStatCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.w400,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -745,7 +812,7 @@ class _ModuleCard extends StatelessWidget {
       case 'Completed':
         return AppColors.accent1;
       case 'In Progress':
-        return const Color(0xFFFFEF3C7);
+        return const Color(0xFFFEF3C7);
       default:
         return AppColors.scaffoldBackground;
     }
@@ -875,70 +942,6 @@ class _ModuleCard extends StatelessWidget {
             Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MaterialItem extends StatelessWidget {
-  final String title;
-  final String icon;
-
-  const _MaterialItem({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.accent1,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: SvgPicture.asset(
-                icon,
-                width: 18,
-                height: 18,
-                colorFilter: const ColorFilter.mode(
-                  AppColors.primary,
-                  BlendMode.srcIn,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              title,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          SvgPicture.asset(
-            'assets/instructor_icons/edit.svg',
-            width: 20,
-            height: 20,
-          ),
-          const SizedBox(width: 12),
-          SvgPicture.asset(
-            'assets/instructor_icons/delete.svg',
-            width: 20,
-            height: 20,
-          ),
-        ],
       ),
     );
   }

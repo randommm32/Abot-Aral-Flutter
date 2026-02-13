@@ -15,10 +15,32 @@ class CoursesPage extends StatefulWidget {
 }
 
 class _CoursesPageState extends State<CoursesPage> {
-  final _coursesStream = Supabase.instance.client
-      .from('courses')
-      .stream(primaryKey: ['id'])
-      .order('created_at', ascending: false);
+  late Stream<List<Map<String, dynamic>>> _coursesStream;
+  String _selectedSort = 'Date (Newest)';
+
+  @override
+  void initState() {
+    super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
+    var query = Supabase.instance.client.from('courses').stream(primaryKey: ['id']);
+
+    if (_selectedSort == 'Date (Newest)') {
+      _coursesStream = query.order('created_at', ascending: false);
+    } else if (_selectedSort == 'Date (Oldest)') {
+      _coursesStream = query.order('created_at', ascending: true);
+    } else if (_selectedSort == 'Name (A-Z)') {
+      _coursesStream = query.order('title', ascending: true);
+    } else if (_selectedSort == 'Name (Z-A)') {
+      _coursesStream = query.order('title', ascending: false);
+    } else {
+      // Default
+      _coursesStream = query.order('created_at', ascending: false);
+    }
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +79,59 @@ class _CoursesPageState extends State<CoursesPage> {
                 ],
               ),
             ),
+            // Sorting Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'All Courses',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      _selectedSort = value;
+                      _initStream();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'Date (Newest)',
+                        child: Text('Date (Newest)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Date (Oldest)',
+                        child: Text('Date (Oldest)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Name (A-Z)',
+                        child: Text('Name (A-Z)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'Name (Z-A)',
+                        child: Text('Name (Z-A)'),
+                      ),
+                    ],
+                    child: Row(
+                      children: [
+                        Text(
+                          _selectedSort,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             // Course List
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -83,7 +158,7 @@ class _CoursesPageState extends State<CoursesPage> {
                   return ListView.separated(
                     padding: const EdgeInsets.all(20),
                     itemCount: courses.length,
-                    separatorBuilder: (context, index) =>
+                    separatorBuilder: (context, _) =>
                         const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final course = courses[index];
@@ -123,7 +198,6 @@ class _CourseItem extends StatelessWidget {
   final double progress;
   final int lessonCount;
   final bool isCompleted;
-  final bool showDownload;
   final VoidCallback? onContinue;
 
   const _CourseItem({
@@ -132,7 +206,6 @@ class _CourseItem extends StatelessWidget {
     required this.progress,
     required this.lessonCount,
     this.isCompleted = false,
-    this.showDownload = false,
     this.onContinue,
   });
 
@@ -236,30 +309,7 @@ class _CourseItem extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (showDownload) ...[
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: SvgPicture.asset(
-                    'assets/icons/download.svg',
-                    width: 16,
-                    height: 16,
-                  ),
-                  label: Text(
-                    'Download',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
+
               TextButton(
                 onPressed: onContinue,
                 style: TextButton.styleFrom(
@@ -293,7 +343,7 @@ class _CourseItem extends StatelessWidget {
 void _showNotificationsDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (_) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,

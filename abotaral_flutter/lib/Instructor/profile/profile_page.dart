@@ -729,15 +729,7 @@ class _ContactCard extends StatelessWidget {
               ],
             ),
           ),
-          SvgPicture.asset(
-            'assets/instructor_icons/edit.svg',
-            width: 16,
-            height: 16,
-            colorFilter: const ColorFilter.mode(
-              AppColors.textSecondary,
-              BlendMode.srcIn,
-            ),
-          ),
+
         ],
       ),
     );
